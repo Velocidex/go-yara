@@ -31,7 +31,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <string.h>
 #include <assert.h>
-#include <math.h>
 #include <float.h>
 
 #include <yara_globals.h>

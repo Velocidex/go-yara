@@ -1,3 +1,15 @@
+diff --git a/libyara/exec.c b/libyara/exec.c
+index a0cf138..286cb0d 100644
+--- a/libyara/exec.c
++++ b/libyara/exec.c
+@@ -31,7 +31,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ 
+ #include <string.h>
+ #include <assert.h>
+-#include <math.h>
+ #include <float.h>
+ 
+ #include <yara/globals.h>
 diff --git a/libyara/include/yara/limits.h b/libyara/include/yara/limits.h
 index 8df3cc2..b122067 100644
 --- a/libyara/include/yara/limits.h
@@ -11,6 +23,18 @@ index 8df3cc2..b122067 100644
  
  // Maximum lenght of file paths. This is the only limit that doesn't have the
  // YR_ prefix. The intention is using the default MAX_PATH if defined.
+diff --git a/libyara/include/yara/modules.h b/libyara/include/yara/modules.h
+index 1724f00..d6f53a7 100644
+--- a/libyara/include/yara/modules.h
++++ b/libyara/include/yara/modules.h
+@@ -33,7 +33,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ #include <assert.h>
+ #include <stdio.h>
+ #include <string.h>
+-#include <math.h>
+ 
+ #include <yara/utils.h>
+ #include <yara/limits.h>
 diff --git a/libyara/include/yara/parser.h b/libyara/include/yara/parser.h
 index abfa986..b04dd54 100644
 --- a/libyara/include/yara/parser.h
@@ -24,11 +48,44 @@ index abfa986..b04dd54 100644
  
  
  int yr_parser_emit(
+diff --git a/libyara/lexer.c b/libyara/lexer.c
+index 02e23bf..1757b0f 100644
+--- a/libyara/lexer.c
++++ b/libyara/lexer.c
+@@ -721,7 +721,6 @@ with noyywrap then we can remove this pragma.
+ #pragma GCC diagnostic ignored "-Wunused-function"
+ #endif
+ 
+-#include <math.h>
+ #include <stdarg.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+diff --git a/libyara/lexer.l b/libyara/lexer.l
+index 23318d8..4f6f695 100644
+--- a/libyara/lexer.l
++++ b/libyara/lexer.l
+@@ -44,7 +44,6 @@ with noyywrap then we can remove this pragma.
+ #pragma GCC diagnostic ignored "-Wunused-function"
+ #endif
+ 
+-#include <math.h>
+ #include <stdarg.h>
+ #include <stdio.h>
+ #include <stdlib.h>
 diff --git a/libyara/modules/math.c b/libyara/modules/math.c
-index 759112e..eca8d35 100644
+index 759112e..4db2a3a 100644
 --- a/libyara/modules/math.c
 +++ b/libyara/modules/math.c
-@@ -39,13 +39,22 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+@@ -27,8 +27,6 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+ 
+-#include <math.h>
+-
+ #include <yara/utils.h>
+ #include <yara/modules.h>
+ #include <yara/mem.h>
+@@ -39,13 +37,22 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  
  // log2 is not defined by math.h in VC++
  
@@ -69,6 +126,18 @@ index 0c447c6..b263ae8 100644
  #if defined(HAVE_LIBCRYPTO)
  #include <openssl/safestack.h>
  #include <openssl/asn1.h>
+diff --git a/libyara/object.c b/libyara/object.c
+index d248dcc..f8a41a4 100644
+--- a/libyara/object.c
++++ b/libyara/object.c
+@@ -34,7 +34,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
+-#include <math.h>
+ 
+ #include <yara/globals.h>
+ #include <yara/mem.h>
 diff --git a/libyara/proc/linux.c b/libyara/proc/linux.c
 index a719ad2..4e398f6 100644
 --- a/libyara/proc/linux.c

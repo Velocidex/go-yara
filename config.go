@@ -1,4 +1,5 @@
-// Copyright © 2015-2017 Hilko Bengen <bengen@hilluzination.de>. All rights reserved.
+// Copyright © 2015-2019 Hilko Bengen <bengen@hilluzination.de>
+// All rights reserved.
 // Use of this source code is governed by the license that can be
 // found in the LICENSE file.
 
@@ -12,12 +13,9 @@ import "unsafe"
 
 type ConfigName uint32
 
-const (
-	ConfigStackSize         ConfigName = C.YR_CONFIG_STACK_SIZE
-	ConfigMaxStringsPerRule            = C.YR_CONFIG_MAX_STRINGS_PER_RULE
-)
+const ConfigStackSize ConfigName = C.YR_CONFIG_STACK_SIZE
 
-// SetCnofiguration sets a global YARA configuration option.
+// SetConfiguration sets a global YARA configuration option.
 func SetConfiguration(name ConfigName, src interface{}) error {
 	i, ok := src.(int)
 	if !ok {

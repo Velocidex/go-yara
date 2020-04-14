@@ -1,4 +1,4 @@
-// Copyright © 2015-2017 Hilko Bengen <bengen@hilluzination.de>
+// Copyright © 2015-2019 Hilko Bengen <bengen@hilluzination.de>
 // All rights reserved.
 //
 // Use of this source code is governed by the license that can be
@@ -55,11 +55,13 @@ func (r *Rules) ScanFileDescriptor(fd uintptr, flags ScanFlags, timeout time.Dur
 	return
 }
 
-// ScanFileDescriptor scans a file using the ruleset. For every event
+// ScanFileDescriptorWithCallback scans a file using the ruleset. For every event
 // emitted by libyara, the appropriate method on the ScanCallback
 // object is called.
 func (r *Rules) ScanFileDescriptorWithCallback(fd uintptr, flags ScanFlags, timeout time.Duration, cb ScanCallback) (err error) {
-	id := callbackData.Put(cb)
+	cbc := &scanCallbackContainer{ScanCallback: cb}
+	defer cbc.destroy()
+	id := callbackData.Put(cbc)
 	defer callbackData.Delete(id)
 	err = newError(C._yr_rules_scan_fd(
 		r.cptr,

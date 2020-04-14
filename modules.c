@@ -141,11 +141,16 @@ int yr_modules_load(
       NULL,
       &module_structure));
 
+  // initialize canary for module's top-level structure, every other object
+  // within the module inherits the same canary.
+  yr_object_set_canary(module_structure, context->canary);
+
   mi.module_name = module_name;
   mi.module_data = NULL;
   mi.module_data_size = 0;
 
   result = context->callback(
+      context,
       CALLBACK_MSG_IMPORT_MODULE,
       &mi,
       context->user_data);
@@ -184,6 +189,7 @@ int yr_modules_load(
   }
 
   result = context->callback(
+      context,
       CALLBACK_MSG_MODULE_IMPORTED,
       module_structure,
       context->user_data);

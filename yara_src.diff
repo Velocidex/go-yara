@@ -1,5 +1,5 @@
 diff --git a/libyara/include/yara/limits.h b/libyara/include/yara/limits.h
-index 8df3cc2..b122067 100644
+index 8feffcdb..8f639614 100644
 --- a/libyara/include/yara/limits.h
 +++ b/libyara/include/yara/limits.h
 @@ -34,7 +34,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
@@ -9,10 +9,10 @@ index 8df3cc2..b122067 100644
 -#include "utils.h"
 +#include "yara/utils.h"
  
- // Maximum lenght of file paths. This is the only limit that doesn't have the
+ // Maximum length of file paths. This is the only limit that doesn't have the
  // YR_ prefix. The intention is using the default MAX_PATH if defined.
 diff --git a/libyara/include/yara/parser.h b/libyara/include/yara/parser.h
-index abfa986..b04dd54 100644
+index 77f710a1..a67dea72 100644
 --- a/libyara/include/yara/parser.h
 +++ b/libyara/include/yara/parser.h
 @@ -31,7 +31,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
@@ -24,24 +24,25 @@ index abfa986..b04dd54 100644
  
  
  int yr_parser_emit(
-diff --git a/libyara/modules/math.c b/libyara/modules/math.c
-index 759112e..eca8d35 100644
---- a/libyara/modules/math.c
-+++ b/libyara/modules/math.c
+diff --git a/libyara/modules/math/math.c b/libyara/modules/math/math.c
+index 3037c556..ad97abac 100644
+--- a/libyara/modules/math/math.c
++++ b/libyara/modules/math/math.c
 @@ -39,13 +39,22 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  
  // log2 is not defined by math.h in VC++
  
--#ifdef _MSC_VER
--double log2(double n)
-+ // A fast approximate log2 function:
-+ // https://github.com/etheory/fastapprox/blob/master/fastapprox/src/fastlog.h
-+ // Having it here removes the need to link to the math library and
-+ // reduces our depenencies while being good enough for entropy
-+ // detection.
-+double log2 (double x)
- {
+-#if defined(_MSC_VER) && _MSC_VER < 1800
+-static double log2(double n)
+-{
 -  return log(n) / log(2.0);
++// A fast approximate log2 function:
++// https://github.com/etheory/fastapprox/blob/master/fastapprox/src/fastlog.h
++// Having it here removes the need to link to the math library and
++// reduces our depenencies while being good enough for entropy
++// detection.
++double log2 (double x)
++ {
 +    union { float f; uint32_t i; } vx = { x };
 +    union { uint32_t i; float f; } mx = { (vx.i & 0x007FFFFF) | 0x3f000000 };
 +    float y = vx.i;
@@ -56,11 +57,11 @@ index 759112e..eca8d35 100644
  
  define_function(string_entropy)
  {
-diff --git a/libyara/modules/pe.c b/libyara/modules/pe.c
-index 0c447c6..b263ae8 100644
---- a/libyara/modules/pe.c
-+++ b/libyara/modules/pe.c
-@@ -33,7 +33,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+diff --git a/libyara/modules/pe/pe.c b/libyara/modules/pe/pe.c
+index d8b18df5..e041aa5e 100644
+--- a/libyara/modules/pe/pe.c
++++ b/libyara/modules/pe/pe.c
+@@ -31,7 +31,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  #include <ctype.h>
  #include <time.h>
  
@@ -70,7 +71,7 @@ index 0c447c6..b263ae8 100644
  #include <openssl/safestack.h>
  #include <openssl/asn1.h>
 diff --git a/libyara/proc/linux.c b/libyara/proc/linux.c
-index a719ad2..4e398f6 100644
+index 5f6a6f2b..9b95f72a 100644
 --- a/libyara/proc/linux.c
 +++ b/libyara/proc/linux.c
 @@ -27,7 +27,6 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
@@ -81,14 +82,14 @@ index a719ad2..4e398f6 100644
  
  #include <fcntl.h>
  #include <inttypes.h>
-@@ -214,5 +213,3 @@ YR_API YR_MEMORY_BLOCK* yr_process_get_first_memory_block(
+@@ -173,5 +172,3 @@ YR_API YR_MEMORY_BLOCK* yr_process_get_first_memory_block(
  
    return yr_process_get_next_memory_block(iterator);
  }
 -
 -#endif
 diff --git a/libyara/proc/mach.c b/libyara/proc/mach.c
-index 8ab6c52..be86abd 100644
+index 8ab6c527..be86abde 100644
 --- a/libyara/proc/mach.c
 +++ b/libyara/proc/mach.c
 @@ -27,7 +27,6 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
@@ -106,7 +107,7 @@ index 8ab6c52..be86abd 100644
 -
 -#endif
 diff --git a/libyara/proc/windows.c b/libyara/proc/windows.c
-index c39521d..ceabf0e 100644
+index c39521da..ceabf0ee 100644
 --- a/libyara/proc/windows.c
 +++ b/libyara/proc/windows.c
 @@ -27,7 +27,6 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT

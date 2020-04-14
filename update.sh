@@ -2,8 +2,8 @@
 
 # This script updates the current repository to the latest version of
 # yara.
-git submodule init
-git submodule update
+#git submodule init
+#git submodule update
 
 # Apply patches to submodule tree
 cd yara_src/
@@ -22,7 +22,8 @@ for i in yara_src/libyara/include/yara/*.h; do
     cp $i yara_`basename $i`
 done
 
-for i in yara_src/libyara/modules/{test,pe,elf,math,time,module_list}*; do
+for i in `ls yara_src/libyara/modules/{pe,elf,math,time}/*.c`; do
+    echo cp $i modules_`basename $i`
     cp $i modules_`basename $i`
 done
 

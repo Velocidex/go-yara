@@ -30,22 +30,23 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef YR_GLOBALS_H
 #define YR_GLOBALS_H
 
+#include <yara_integers.h>
 #include <yara_threading.h>
 
 // Pre-computed tables for quickly converting a character to lowercase or to
 // its alternative case (uppercase if it is a lowercase and vice versa). This
 // tables are initialized by yr_initialize.
-extern char yr_lowercase[256];
-extern char yr_altercase[256];
+extern uint8_t yr_lowercase[256];
+extern uint8_t yr_altercase[256];
 
-// Canary value used for preventing hand-crafted objects from being embedded
-// in compiled rules and used to exploit YARA. The canary value is initialized
-// to a random value by yr_initialize and is subsequently set to all objects
-// created by yr_object_create. The canary is verified when objects are used
-// by yr_execute_code.
-extern int yr_canary;
 
-extern YR_THREAD_STORAGE_KEY yr_tidx_key;
-extern YR_THREAD_STORAGE_KEY yr_recovery_state_key;
+// Thread-local storage (TLS) key used by the regexp and hex string parsers.
+// Each thread calling yr_parse_re_string/yr_parse_hex_string stores a pointer
+// to a jmp_buf struct used by setjmp/longjmp for recovering when a fatal error
+// occurs in the parser.
+extern YR_THREAD_STORAGE_KEY yr_yyfatal_trampoline_tls;
+
+// Thread-local storage (TLS) key used by YR_TRYCATCH.
+extern YR_THREAD_STORAGE_KEY yr_trycatch_trampoline_tls;
 
 #endif

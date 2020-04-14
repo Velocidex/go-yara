@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2014. The YARA Authors. All Rights Reserved.
+Copyright (c) 2018. The YARA Authors. All Rights Reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
 are permitted provided that the following conditions are met:
@@ -27,27 +27,46 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef YR_SCAN_H
-#define YR_SCAN_H
+#ifndef YR_STACK_H
+#define YR_STACK_H
 
-#include <yara_types.h>
+typedef struct YR_STACK YR_STACK;
 
-//
-// Flags used with yr_scanner_set_flags and yr_rules_scan_xxx functions.
-//
-#define SCAN_FLAGS_FAST_MODE                    1
-#define SCAN_FLAGS_PROCESS_MEMORY               2
-#define SCAN_FLAGS_NO_TRYCATCH                  4
-#define SCAN_FLAGS_REPORT_RULES_MATCHING        8
-#define SCAN_FLAGS_REPORT_RULES_NOT_MATCHING   16
+struct YR_STACK
+{
+    // Pointer to a heap-allocated array containing the void* values put in
+    // in the stack. This array starts with a fixed size and it's grown as
+    // required when new items are pushed into the stack.
+    void* items;
+
+    // Current capacity (i.e: the number of items that fit into the array)
+    int capacity;
+
+    // Size of each individual item in the stack.
+    int item_size;
+
+    // Index of the stack's top in the items array.
+    int top;
+};
 
 
-int yr_scan_verify_match(
-    YR_SCAN_CONTEXT* context,
-    YR_AC_MATCH* ac_match,
-    const uint8_t* data,
-    size_t data_size,
-    uint64_t data_base,
-    size_t offset);
+int yr_stack_create(
+    int initial_capacity,
+    int item_size,
+    YR_STACK** stack);
+
+
+void yr_stack_destroy(
+    YR_STACK* stack);
+
+
+int yr_stack_push(
+    YR_STACK* stack,
+    void* item);
+
+
+int yr_stack_pop(
+    YR_STACK* stack,
+    void* item);
 
 #endif

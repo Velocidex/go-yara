@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2014. The YARA Authors. All Rights Reserved.
+Copyright (c) 2020. The YARA Authors. All Rights Reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
 are permitted provided that the following conditions are met:
@@ -27,27 +27,26 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef YR_SCAN_H
-#define YR_SCAN_H
+#ifndef YR_BASE64_H
+#define YR_BASE64_H
 
 #include <yara_types.h>
+#include <yara_re.h>
+#include <yara_sizedstr.h>
 
-//
-// Flags used with yr_scanner_set_flags and yr_rules_scan_xxx functions.
-//
-#define SCAN_FLAGS_FAST_MODE                    1
-#define SCAN_FLAGS_PROCESS_MEMORY               2
-#define SCAN_FLAGS_NO_TRYCATCH                  4
-#define SCAN_FLAGS_REPORT_RULES_MATCHING        8
-#define SCAN_FLAGS_REPORT_RULES_NOT_MATCHING   16
+typedef struct BASE64_NODE BASE64_NODE;
 
+struct BASE64_NODE {
 
-int yr_scan_verify_match(
-    YR_SCAN_CONTEXT* context,
-    YR_AC_MATCH* ac_match,
-    const uint8_t* data,
-    size_t data_size,
-    uint64_t data_base,
-    size_t offset);
+  SIZED_STRING* str;
+  int escaped;
+  BASE64_NODE* next;
 
+};
+
+int yr_base64_ast_from_string(
+    SIZED_STRING* in_str,
+    YR_MODIFIER modifier,
+    RE_AST** re_ast,
+    RE_ERROR* error);
 #endif

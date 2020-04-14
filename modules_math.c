@@ -27,6 +27,8 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+#include <math.h>
+
 #include <yara_utils.h>
 #include <yara_modules.h>
 #include <yara_mem.h>
@@ -37,13 +39,13 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // log2 is not defined by math.h in VC++
 
- // A fast approximate log2 function:
- // https://github.com/etheory/fastapprox/blob/master/fastapprox/src/fastlog.h
- // Having it here removes the need to link to the math library and
- // reduces our depenencies while being good enough for entropy
- // detection.
+// A fast approximate log2 function:
+// https://github.com/etheory/fastapprox/blob/master/fastapprox/src/fastlog.h
+// Having it here removes the need to link to the math library and
+// reduces our depenencies while being good enough for entropy
+// detection.
 double log2 (double x)
-{
+ {
     union { float f; uint32_t i; } vx = { x };
     union { uint32_t i; float f; } mx = { (vx.i & 0x007FFFFF) | 0x3f000000 };
     float y = vx.i;
@@ -64,7 +66,7 @@ define_function(string_entropy)
   uint32_t* data = (uint32_t*) yr_calloc(256, sizeof(uint32_t));
 
   if (data == NULL)
-    return_float(UNDEFINED);
+    return_float(YR_UNDEFINED);
 
   for (i = 0; i < s->length; i++)
   {
@@ -104,12 +106,12 @@ define_function(data_entropy)
   YR_MEMORY_BLOCK_ITERATOR* iterator = context->iterator;
 
   if (offset < 0 || length < 0 || offset < block->base)
-    return_float(UNDEFINED);
+    return_float(YR_UNDEFINED);
 
   data = (uint32_t*) yr_calloc(256, sizeof(uint32_t));
 
   if (data == NULL)
-    return_float(UNDEFINED);
+    return_float(YR_UNDEFINED);
 
   foreach_memory_block(iterator, block)
   {
@@ -125,7 +127,7 @@ define_function(data_entropy)
       if (block_data == NULL)
       {
         yr_free(data);
-        return_float(UNDEFINED);
+        return_float(YR_UNDEFINED);
       }
 
       total_len += data_len;
@@ -149,7 +151,7 @@ define_function(data_entropy)
       // undefined.
 
       yr_free(data);
-      return_float(UNDEFINED);
+      return_float(YR_UNDEFINED);
     }
 
     if (block->base + block->size > offset + length)
@@ -159,7 +161,7 @@ define_function(data_entropy)
   if (!past_first_block)
   {
     yr_free(data);
-    return_float(UNDEFINED);
+    return_float(YR_UNDEFINED);
   }
 
   for (i = 0; i < 256; i++)
@@ -214,7 +216,7 @@ define_function(data_deviation)
   YR_MEMORY_BLOCK_ITERATOR* iterator = context->iterator;
 
   if (offset < 0 || length < 0 || offset < block->base)
-    return_float(UNDEFINED);
+    return_float(YR_UNDEFINED);
 
   foreach_memory_block(iterator, block)
   {
@@ -227,7 +229,7 @@ define_function(data_deviation)
       block_data = block->fetch_data(block);
 
       if (block_data == NULL)
-        return_float(UNDEFINED);
+        return_float(YR_UNDEFINED);
 
       total_len += data_len;
       offset += data_len;
@@ -245,7 +247,7 @@ define_function(data_deviation)
       // the checksum over a range of non contiguous blocks. As
       // range contains gaps of undefined data the checksum is
       // undefined.
-      return_float(UNDEFINED);
+      return_float(YR_UNDEFINED);
     }
 
     if (block->base + block->size > offset + length)
@@ -253,7 +255,7 @@ define_function(data_deviation)
   }
 
   if (!past_first_block)
-    return_float(UNDEFINED);
+    return_float(YR_UNDEFINED);
 
   return_float(sum / total_len);
 }
@@ -289,7 +291,7 @@ define_function(data_mean)
   size_t i;
 
   if (offset < 0 || length < 0 || offset < block->base)
-    return_float(UNDEFINED);
+    return_float(YR_UNDEFINED);
 
   foreach_memory_block(iterator, block)
   {
@@ -303,7 +305,7 @@ define_function(data_mean)
       const uint8_t* block_data = block->fetch_data(block);
 
       if (block_data == NULL)
-        return_float(UNDEFINED);
+        return_float(YR_UNDEFINED);
 
       total_len += data_len;
       offset += data_len;
@@ -321,7 +323,7 @@ define_function(data_mean)
       // the checksum over a range of non contiguous blocks. As
       // range contains gaps of undefined data the checksum is
       // undefined.
-      return_float(UNDEFINED);
+      return_float(YR_UNDEFINED);
     }
 
     if (block->base + block->size > offset + length)
@@ -329,7 +331,7 @@ define_function(data_mean)
   }
 
   if (!past_first_block)
-    return_float(UNDEFINED);
+    return_float(YR_UNDEFINED);
 
   return_float(sum / total_len);
 }
@@ -357,7 +359,7 @@ define_function(data_serial_correlation)
   double scc = 0;
 
   if (offset < 0 || length < 0 || offset < block->base)
-    return_float(UNDEFINED);
+    return_float(YR_UNDEFINED);
 
   foreach_memory_block(iterator, block)
   {
@@ -371,7 +373,7 @@ define_function(data_serial_correlation)
       const uint8_t* block_data = block->fetch_data(block);
 
       if (block_data == NULL)
-        return_float(UNDEFINED);
+        return_float(YR_UNDEFINED);
 
       total_len += data_len;
       offset += data_len;
@@ -395,7 +397,7 @@ define_function(data_serial_correlation)
       // the checksum over a range of non contiguous blocks. As
       // range contains gaps of undefined data the checksum is
       // undefined.
-      return_float(UNDEFINED);
+      return_float(YR_UNDEFINED);
     }
 
     if (block->base + block->size > offset + length)
@@ -403,7 +405,7 @@ define_function(data_serial_correlation)
   }
 
   if (!past_first_block)
-    return_float(UNDEFINED);
+    return_float(YR_UNDEFINED);
 
   scct1 += scclast * sccun;
   scct2 *= scct2;
@@ -474,7 +476,7 @@ define_function(data_monte_carlo_pi)
   YR_MEMORY_BLOCK_ITERATOR* iterator = context->iterator;
 
   if (offset < 0 || length < 0 || offset < block->base)
-    return_float(UNDEFINED);
+    return_float(YR_UNDEFINED);
 
   foreach_memory_block(iterator, block)
   {
@@ -490,7 +492,7 @@ define_function(data_monte_carlo_pi)
       const uint8_t* block_data = block->fetch_data(block);
 
       if (block_data == NULL)
-        return_float(UNDEFINED);
+        return_float(YR_UNDEFINED);
 
       offset += data_len;
       length -= data_len;
@@ -527,7 +529,7 @@ define_function(data_monte_carlo_pi)
       // the checksum over a range of non contiguous blocks. As
       // range contains gaps of undefined data the checksum is
       // undefined.
-      return_float(UNDEFINED);
+      return_float(YR_UNDEFINED);
     }
 
     if (block->base + block->size > offset + length)
@@ -535,7 +537,7 @@ define_function(data_monte_carlo_pi)
   }
 
   if (!past_first_block || mcount == 0)
-    return_float(UNDEFINED);
+    return_float(YR_UNDEFINED);
 
   mpi = 4.0 * ((double) inmont / mcount);
 
@@ -582,7 +584,7 @@ define_function(string_monte_carlo_pi)
   }
 
   if (mcount == 0)
-    return_float(UNDEFINED);
+    return_float(YR_UNDEFINED);
 
   mpi = 4.0 * ((double) inmont / mcount);
   return_float(fabs((mpi - PI) / PI));

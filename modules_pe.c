@@ -52,6 +52,15 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <yara_strutils.h>
 #include <yara_utils.h>
 
+#include "md5.h"
+typedef MD5_CTX yr_md5_ctx;
+
+#define yr_md5_init(ctx) \
+ MD5Init(ctx)
+#define yr_md5_update(ctx,data,len) \
+ MD5Update(ctx,data,len)
+#define yr_md5_final(digest,ctx) \
+ MD5Final(digest,ctx)
 
 #include <yara_pe_utils.h>
 
@@ -1824,10 +1833,6 @@ define_function(exports_ordinal)
   return_integer(0);
 }
 
-#if defined(HAVE_LIBCRYPTO) || \
-    defined(HAVE_WINCRYPT_H) || \
-    defined(HAVE_COMMONCRYPTO_COMMONCRYPTO_H)
-
 //
 // Generate an import hash:
 // https://www.mandiant.com/blog/tracking-malware-import-hashing/
@@ -1954,9 +1959,6 @@ define_function(imphash)
 
   return_string(digest_ascii);
 }
-
-#endif  // defined(HAVE_LIBCRYPTO) || defined(HAVE_WINCRYPT_H)
-
 
 define_function(imports)
 {
@@ -2555,12 +2557,7 @@ begin_declarations;
     declare_function("toolid", "ii", "i", rich_toolid_version);
   end_struct("rich_signature");
 
-  #if defined(HAVE_LIBCRYPTO) || \
-      defined(HAVE_WINCRYPT_H) || \
-      defined(HAVE_COMMONCRYPTO_COMMONCRYPTO_H)
   declare_function("imphash", "", "s", imphash);
-  #endif
-
   declare_function("section_index", "s", "i", section_index_name);
   declare_function("section_index", "i", "i", section_index_addr);
   declare_function("exports", "s", "i", exports);

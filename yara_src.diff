@@ -1,5 +1,5 @@
 diff --git a/libyara/include/yara/limits.h b/libyara/include/yara/limits.h
-index 8feffcdb..8f639614 100644
+index 4195f3fd..c45fe6b0 100644
 --- a/libyara/include/yara/limits.h
 +++ b/libyara/include/yara/limits.h
 @@ -34,7 +34,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
@@ -9,10 +9,10 @@ index 8feffcdb..8f639614 100644
 -#include "utils.h"
 +#include "yara/utils.h"
 
- // Maximum length of file paths. This is the only limit that doesn't have the
+ // Maximum lenght of file paths. This is the only limit that doesn't have the
  // YR_ prefix. The intention is using the default MAX_PATH if defined.
 diff --git a/libyara/include/yara/parser.h b/libyara/include/yara/parser.h
-index 77f710a1..a67dea72 100644
+index 057e8fe3..300d1050 100644
 --- a/libyara/include/yara/parser.h
 +++ b/libyara/include/yara/parser.h
 @@ -31,7 +31,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
@@ -25,7 +25,7 @@ index 77f710a1..a67dea72 100644
 
  int yr_parser_emit(
 diff --git a/libyara/modules/math.c b/libyara/modules/math.c
-index 3037c556..ad97abac 100644
+index 7043f598..0b59a542 100644
 --- a/libyara/modules/math.c
 +++ b/libyara/modules/math.c
 @@ -39,13 +39,22 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
@@ -58,7 +58,7 @@ index 3037c556..ad97abac 100644
  define_function(string_entropy)
  {
 diff --git a/libyara/modules/pe.c b/libyara/modules/pe.c
-index d8b18df5..e041aa5e 100644
+index 2d399c21..afe91bac 100644
 --- a/libyara/modules/pe.c
 +++ b/libyara/modules/pe.c
 @@ -31,7 +31,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
@@ -70,6 +70,72 @@ index d8b18df5..e041aa5e 100644
  #if defined(HAVE_LIBCRYPTO)
  #include <openssl/safestack.h>
  #include <openssl/asn1.h>
+@@ -45,15 +45,24 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ #endif
+ #endif
+
+-#include <yara/endian.h>
+-#include <yara/pe.h>
+-#include <yara/modules.h>
+-#include <yara/mem.h>
+-#include <yara/strutils.h>
+-#include <yara/utils.h>
++#include <yara_endian.h>
++#include <yara_pe.h>
++#include <yara_modules.h>
++#include <yara_mem.h>
++#include <yara_strutils.h>
++#include <yara_utils.h>
+
++#include "md5.h"
++typedef MD5_CTX yr_md5_ctx;
+
+-#include <yara/pe_utils.h>
++#define yr_md5_init(ctx) \
++ MD5Init(ctx)
++#define yr_md5_update(ctx,data,len) \
++ MD5Update(ctx,data,len)
++#define yr_md5_final(digest,ctx) \
++ MD5Final(digest,ctx)
++
++#include <yara_pe_utils.h>
+
+ #define MODULE_NAME pe
+
+@@ -1824,10 +1833,6 @@ define_function(exports_ordinal)
+   return_integer(0);
+ }
+
+-#if defined(HAVE_LIBCRYPTO) || \
+-    defined(HAVE_WINCRYPT_H) || \
+-    defined(HAVE_COMMONCRYPTO_COMMONCRYPTO_H)
+-
+ //
+ // Generate an import hash:
+ // https://www.mandiant.com/blog/tracking-malware-import-hashing/
+@@ -1955,9 +1960,6 @@ define_function(imphash)
+   return_string(digest_ascii);
+ }
+
+-#endif  // defined(HAVE_LIBCRYPTO) || defined(HAVE_WINCRYPT_H)
+-
+-
+ define_function(imports)
+ {
+   char* dll_name = string_argument(1);
+@@ -2555,12 +2557,7 @@ begin_declarations;
+     declare_function("toolid", "ii", "i", rich_toolid_version);
+   end_struct("rich_signature");
+
+-  #if defined(HAVE_LIBCRYPTO) || \
+-      defined(HAVE_WINCRYPT_H) || \
+-      defined(HAVE_COMMONCRYPTO_COMMONCRYPTO_H)
+   declare_function("imphash", "", "s", imphash);
+-  #endif
+-
+   declare_function("section_index", "s", "i", section_index_name);
+   declare_function("section_index", "i", "i", section_index_addr);
+   declare_function("exports", "s", "i", exports);
 diff --git a/libyara/proc/linux.c b/libyara/proc/linux.c
 index 5f6a6f2b..9b95f72a 100644
 --- a/libyara/proc/linux.c

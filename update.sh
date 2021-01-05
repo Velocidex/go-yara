@@ -15,7 +15,7 @@ echo Applying patches.
 patch -p1 < ../yara_src.diff
 cd -
 
-echo Copying files to golag tree.
+echo Copying files to golang tree.
 cp yara_src/libyara/*.c .
 cp yara_src/libyara/*.h .
 cp yara_src/libyara/include/yara.h .

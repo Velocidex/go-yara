@@ -8,5 +8,4 @@ package yara
 
 // #cgo CFLAGS: -D_FILE_OFFSET_BITS=64
 // #cgo LDFLAGS:
-
 import "C"

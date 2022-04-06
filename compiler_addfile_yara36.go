@@ -42,7 +42,7 @@ func (c *Compiler) AddFile(file *os.File, namespace string) (err error) {
 	defer callbackData.Delete(id)
 	C.yr_compiler_set_callback(c.cptr, C.YR_COMPILER_CALLBACK_FUNC(C.compilerCallback), id)
 	numErrors := int(C.yr_compiler_add_fd(c.cptr,
-		(C.YR_FILE_DESCRIPTOR)(unsafe.Pointer(file.Fd())), ns, filename))
+		C.YR_FILE_DESCRIPTOR(uintptr(file.Fd())), ns, filename))
 	if numErrors > 0 {
 		var buf [1024]C.char
 		msg := C.GoString(C.yr_compiler_get_error_message(

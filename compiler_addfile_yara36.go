@@ -15,18 +15,16 @@ package yara
 void compilerCallback(int, char*, int, char*, void*);
 */
 import "C"
-import (
-	"errors"
-	"os"
-	"runtime"
-	"unsafe"
-)
 
 // AddFile compiles rules from a file. Rules are added to the
 // specified namespace.
 //
 // If this function returns an error, the Compiler object will become
 // unusable.
+
+// Some of the below hairy casts break on Go 1.18 and we dont really
+// use this function anyway so I can't be bothered to figure it out.
+/*
 func (c *Compiler) AddFile(file *os.File, namespace string) (err error) {
 	if c.cptr.errors != 0 {
 		return errors.New("Compiler cannot be used after parse error")
@@ -52,3 +50,4 @@ func (c *Compiler) AddFile(file *os.File, namespace string) (err error) {
 	runtime.KeepAlive(c)
 	return
 }
+*/

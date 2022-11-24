@@ -9,6 +9,7 @@ cp ./go-yara/*.{go,c,h} .
 cp ./scripts/go.mod .
 cp ./scripts/modules_module_list .
 cp ./scripts/cgo.go .
+cp ./scripts/md5.* .
 
 # Apply patches to submodule tree
 cd yara_src/

@@ -33,6 +33,18 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "crypto.h"
 
+
+#include "md5.h"
+typedef MD5_CTX yr_md5_ctx;
+
+#define yr_md5_init(ctx) \
+ MD5Init(ctx)
+#define yr_md5_update(ctx,data,len) \
+ MD5Update(ctx,data,len)
+#define yr_md5_final(digest,ctx) \
+ MD5Final(digest,ctx)
+
+
 #if defined(HAVE_LIBCRYPTO)
 #include <openssl/asn1.h>
 #include <openssl/bio.h>
@@ -2601,9 +2613,6 @@ define_function(exports_index_regex)
   return_integer(YR_UNDEFINED);
 }
 
-#if defined(HAVE_LIBCRYPTO) || defined(HAVE_WINCRYPT_H) || \
-    defined(HAVE_COMMONCRYPTO_COMMONCRYPTO_H)
-
 //
 // Generate an import hash:
 // https://www.mandiant.com/blog/tracking-malware-import-hashing/
@@ -2727,8 +2736,6 @@ define_function(imphash)
 
   return_string(digest_ascii);
 }
-
-#endif  // defined(HAVE_LIBCRYPTO) || defined(HAVE_WINCRYPT_H)
 
 int64_t pe_imports_dll(IMPORTED_DLL* dll, char* dll_name)
 {

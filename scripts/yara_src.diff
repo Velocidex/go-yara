@@ -1,0 +1,99 @@
+diff --git a/modules_math.c b/modules_math.c
+index d01ccb0..f5e4125 100644
+--- a/modules_math.c
++++ b/modules_math.c
+@@ -45,6 +45,24 @@ static double log2(double n)
+ }
+ #endif
+
++// A fast approximate log2 function:
++// https://github.com/etheory/fastapprox/blob/master/fastapprox/src/fastlog.h
++// Having it here removes the need to link to the math library and
++// reduces our depenencies while being good enough for entropy
++// detection.
++double log2 (double x)
++ {
++    union { float f; uint32_t i; } vx = { x };
++    union { uint32_t i; float f; } mx = { (vx.i & 0x007FFFFF) | 0x3f000000 };
++    float y = vx.i;
++    y *= 1.1920928955078125e-7f;
++
++    return y - 124.22551499f
++        - 1.498030302f * mx.f
++        - 1.72587999f / (0.3520887068f + mx.f);
++}
++
++
+ uint32_t* get_distribution(int64_t offset, int64_t length, YR_SCAN_CONTEXT* context) {
+   bool past_first_block = false;
+
+diff --git a/modules_pe.c b/modules_pe.c
+index accc411..298803d 100644
+--- a/modules_pe.c
++++ b/modules_pe.c
+@@ -31,7 +31,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ #include <stdio.h>
+ #include <time.h>
+
+-#include "../crypto.h"
++#include "crypto.h"
++
+ #if defined(HAVE_LIBCRYPTO)
+ #include <openssl/asn1.h>
+ #include <openssl/bio.h>
+diff --git a/proc_darwin.c b/proc_darwin.c
+index bb69f53..ecb3b55 100644
+--- a/proc_darwin.c
++++ b/proc_darwin.c
+@@ -27,7 +27,6 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+-#if defined(USE_MACH_PROC)
+
+ #include <mach/mach.h>
+ #include <mach/mach_vm.h>
+@@ -182,5 +181,3 @@ YR_API YR_MEMORY_BLOCK* yr_process_get_first_memory_block(
+
+   return result;
+ }
+-
+-#endif
+diff --git a/proc_linux.c b/proc_linux.c
+index 807ae72..7f88fae 100644
+--- a/proc_linux.c
++++ b/proc_linux.c
+@@ -27,8 +27,6 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+-#if defined(USE_LINUX_PROC)
+-
+ #include <errno.h>
+ #include <fcntl.h>
+ #include <inttypes.h>
+@@ -441,5 +439,3 @@ _exit:
+
+   return result;
+ }
+-
+-#endif
+diff --git a/proc_windows.c b/proc_windows.c
+index 33a3e4f..37de7c4 100644
+--- a/proc_windows.c
++++ b/proc_windows.c
+@@ -27,8 +27,6 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+-#if defined(USE_WINDOWS_PROC)
+-
+ #include <windows.h>
+ #include <yara_error.h>
+ #include <yara_libyara.h>
+@@ -192,5 +190,3 @@ YR_API YR_MEMORY_BLOCK* yr_process_get_first_memory_block(
+
+   return result;
+ }
+-
+-#endif

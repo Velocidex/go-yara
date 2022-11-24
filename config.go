@@ -1,9 +1,8 @@
-// Copyright © 2015-2019 Hilko Bengen <bengen@hilluzination.de>
+// Copyright © 2015-2020 Hilko Bengen <bengen@hilluzination.de>
 // All rights reserved.
+//
 // Use of this source code is governed by the license that can be
 // found in the LICENSE file.
-
-// +build !yara3.3,!yara3.4
 
 package yara
 
@@ -13,7 +12,12 @@ import "unsafe"
 
 type ConfigName uint32
 
-const ConfigStackSize ConfigName = C.YR_CONFIG_STACK_SIZE
+const (
+	ConfigStackSize             ConfigName = C.YR_CONFIG_STACK_SIZE
+	ConfigMaxMatchData                     = C.YR_CONFIG_MAX_MATCH_DATA
+	ConfigMaxStringsPerRule                = C.YR_CONFIG_MAX_STRINGS_PER_RULE
+	ConfigMaxProcessMemoryChunk            = C.YR_CONFIG_MAX_PROCESS_MEMORY_CHUNK
+)
 
 // SetConfiguration sets a global YARA configuration option.
 func SetConfiguration(name ConfigName, src interface{}) error {

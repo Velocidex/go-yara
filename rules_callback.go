@@ -1,13 +1,14 @@
+// Copyright © 2015-2020 Hilko Bengen <bengen@hilluzination.de>
+// All rights reserved.
+//
+// Use of this source code is governed by the license that can be
+// found in the LICENSE file.
+
 package yara
 
 /*
 #include <stdlib.h>
 #include <yara.h>
-
-// Constant not defined until YARA 3.5
-#ifndef CALLBACK_MSG_MODULE_IMPORTED
-# define CALLBACK_MSG_MODULE_IMPORTED 5
-#endif
 */
 import "C"
 import (
@@ -16,37 +17,43 @@ import (
 	"unsafe"
 )
 
+// ScanContext contains the data passed to the ScanCallback methods.
+//
+// Since this type contains a C pointer to a YR_SCAN_CONTEXT structure
+// that may be automatically freed, it should not be copied.
+type ScanContext struct {
+	cptr *C.YR_SCAN_CONTEXT
+}
+
 // ScanCallback is a placeholder for different interfaces that may be
 // implemented by the callback object that is passed to the
-// (*Rules).Scan*WithCallback methods.
-type ScanCallback interface{}
-
-// ScanCallbackMatch is used to record rules that matched during a
-// scan. The RuleMatching method corresponds to YARA's
+// (*Rules).ScanXxxx and (*Scanner).ScanXxxx methods.
+//
+// The RuleMatching method corresponds to YARA's
 // CALLBACK_MSG_RULE_MATCHING message.
-type ScanCallbackMatch interface {
-	RuleMatching(*Rule) (bool, error)
+type ScanCallback interface {
+	RuleMatching(*ScanContext, *Rule) (bool, error)
 }
 
 // ScanCallbackNoMatch is used to record rules that did not match
 // during a scan. The RuleNotMatching method corresponds to YARA's
 // CALLBACK_MSG_RULE_NOT_MATCHING mssage.
 type ScanCallbackNoMatch interface {
-	RuleNotMatching(*Rule) (bool, error)
+	RuleNotMatching(*ScanContext, *Rule) (bool, error)
 }
 
 // ScanCallbackFinished is used to signal that a scan has finished.
 // The ScanFinished method corresponds to YARA's
 // CALLBACK_MSG_SCAN_FINISHED message.
 type ScanCallbackFinished interface {
-	ScanFinished() (bool, error)
+	ScanFinished(*ScanContext) (bool, error)
 }
 
 // ScanCallbackModuleImport is used to provide data to a YARA module.
 // The ImportModule method corresponds to YARA's
 // CALLBACK_MSG_IMPORT_MODULE message.
 type ScanCallbackModuleImport interface {
-	ImportModule(string) ([]byte, bool, error)
+	ImportModule(*ScanContext, string) ([]byte, bool, error)
 }
 
 // ScanCallbackModuleImportFinished can be used to free resources that
@@ -54,7 +61,13 @@ type ScanCallbackModuleImport interface {
 // ModuleImported method corresponds to YARA's
 // CALLBACK_MSG_MODULE_IMPORTED message.
 type ScanCallbackModuleImportFinished interface {
-	ModuleImported(*Object) (bool, error)
+	ModuleImported(*ScanContext, *Object) (bool, error)
+}
+
+/// ScanCAllbackConsoleLog can be used to implement custom functions
+/// to handle the console.log feature introduced in YARA 4.2.
+type ScanCallbackConsoleLog interface {
+	ConsoleLog(*ScanContext, string)
 }
 
 // scanCallbackContainer is used by to pass a ScanCallback (and
@@ -63,14 +76,15 @@ type ScanCallbackModuleImportFinished interface {
 // pointers.
 type scanCallbackContainer struct {
 	ScanCallback
+	rules *Rules
 	cdata []unsafe.Pointer
 }
 
 // makeScanCallbackContainer sets up a scanCallbackContainer with a
 // finalizer method that that frees any stored C pointers when the
 // container is garbage-collected.
-func makeScanCallbackContainer(sc ScanCallback) *scanCallbackContainer {
-	c := &scanCallbackContainer{ScanCallback: sc, cdata: nil}
+func makeScanCallbackContainer(sc ScanCallback, r *Rules) *scanCallbackContainer {
+	c := &scanCallbackContainer{sc, r, nil}
 	runtime.SetFinalizer(c, (*scanCallbackContainer).finalize)
 	return c
 }
@@ -88,33 +102,33 @@ func (c *scanCallbackContainer) finalize() {
 }
 
 //export scanCallbackFunc
-func scanCallbackFunc(message C.int, messageData, userData unsafe.Pointer) C.int {
-	cbc, ok := callbackData.Get(userData).(*scanCallbackContainer)
+func scanCallbackFunc(ctx *C.YR_SCAN_CONTEXT, message C.int, messageData, userData unsafe.Pointer) C.int {
+	cbc, ok := cgoHandle(*(*uintptr)(userData)).Value().(*scanCallbackContainer)
+	s := &ScanContext{cptr: ctx}
 	if !ok {
 		return C.CALLBACK_ERROR
+	}
+	if cbc.ScanCallback == nil {
+		return C.CALLBACK_CONTINUE
 	}
 	var abort bool
 	var err error
 	switch message {
 	case C.CALLBACK_MSG_RULE_MATCHING:
-		if c, ok := cbc.ScanCallback.(ScanCallbackMatch); ok {
-			r := (*C.YR_RULE)(messageData)
-			abort, err = c.RuleMatching(&Rule{r})
-		}
+		abort, err = cbc.ScanCallback.RuleMatching(s, &Rule{(*C.YR_RULE)(messageData), cbc.rules})
 	case C.CALLBACK_MSG_RULE_NOT_MATCHING:
 		if c, ok := cbc.ScanCallback.(ScanCallbackNoMatch); ok {
-			r := (*C.YR_RULE)(messageData)
-			abort, err = c.RuleNotMatching(&Rule{r})
+			abort, err = c.RuleNotMatching(s, &Rule{(*C.YR_RULE)(messageData), cbc.rules})
 		}
 	case C.CALLBACK_MSG_SCAN_FINISHED:
 		if c, ok := cbc.ScanCallback.(ScanCallbackFinished); ok {
-			abort, err = c.ScanFinished()
+			abort, err = c.ScanFinished(s)
 		}
 	case C.CALLBACK_MSG_IMPORT_MODULE:
 		if c, ok := cbc.ScanCallback.(ScanCallbackModuleImport); ok {
 			mi := (*C.YR_MODULE_IMPORT)(messageData)
 			var buf []byte
-			if buf, abort, err = c.ImportModule(C.GoString(mi.module_name)); len(buf) == 0 {
+			if buf, abort, err = c.ImportModule(s, C.GoString(mi.module_name)); len(buf) == 0 {
 				break
 			}
 			cbuf := C.calloc(1, C.size_t(len(buf)))
@@ -127,8 +141,11 @@ func scanCallbackFunc(message C.int, messageData, userData unsafe.Pointer) C.int
 		}
 	case C.CALLBACK_MSG_MODULE_IMPORTED:
 		if c, ok := cbc.ScanCallback.(ScanCallbackModuleImportFinished); ok {
-			obj := (*C.YR_OBJECT)(messageData)
-			abort, err = c.ModuleImported(&Object{obj})
+			abort, err = c.ModuleImported(s, &Object{(*C.YR_OBJECT)(messageData)})
+		}
+	case C.CALLBACK_MSG_CONSOLE_LOG:
+		if c, ok := cbc.ScanCallback.(ScanCallbackConsoleLog); ok {
+			c.ConsoleLog(s, C.GoString((*C.char)(messageData)))
 		}
 	}
 
@@ -147,20 +164,13 @@ type MatchRules []MatchRule
 
 // RuleMatching implements the ScanCallbackMatch interface for
 // MatchRules.
-func (mr *MatchRules) RuleMatching(r *Rule) (abort bool, err error) {
-	metas := r.Metas()
-	// convert int to int32 for code that relies on previous behavior
-	for s := range metas {
-		if i, ok := metas[s].(int); ok {
-			metas[s] = int32(i)
-		}
-	}
+func (mr *MatchRules) RuleMatching(sc *ScanContext, r *Rule) (abort bool, err error) {
 	*mr = append(*mr, MatchRule{
 		Rule:      r.Identifier(),
 		Namespace: r.Namespace(),
 		Tags:      r.Tags(),
-		Meta:      metas,
-		Strings:   r.getMatchStrings(),
+		Metas:     r.Metas(),
+		Strings:   r.getMatchStrings(sc),
 	})
 	return
 }

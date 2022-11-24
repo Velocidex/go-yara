@@ -9,21 +9,22 @@ git submodule update
 cd yara_src/
 echo Resetting the yara source tree.
 git reset --hard
-git checkout v3.11.0
-
-echo Applying patches.
-patch -p1 < ../yara_src.diff
+git checkout v4.2.2
 cd -
+
+#echo Applying patches.
+patch -p1 < ./scripts/yara_src.diff
 
 echo Copying files to golang tree.
 cp yara_src/libyara/*.c .
 cp yara_src/libyara/*.h .
 cp yara_src/libyara/include/yara.h .
+cp yara_src/libyara/include/yara/*.h .
 for i in yara_src/libyara/include/yara/*.h; do
     cp $i yara_`basename $i`
 done
 
-for i in `ls yara_src/libyara/modules/{pe,elf,math,time}.c`; do
+for i in `ls yara_src/libyara/modules/{pe,elf,math,time}/*.[ch]`; do
     echo cp $i modules_`basename $i`
     cp $i modules_`basename $i`
 done

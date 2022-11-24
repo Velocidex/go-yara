@@ -1,3 +1,9 @@
+// Copyright © 2015-2020 Hilko Bengen <bengen@hilluzination.de>
+// All rights reserved.
+//
+// Use of this source code is governed by the license that can be
+// found in the LICENSE file.
+
 package yara_test
 
 import (
@@ -5,7 +11,7 @@ import (
 	"fmt"
 	"io"
 
-	yara "github.com/Velocidex/go-yara"
+	"github.com/hillu/go-yara/v4"
 )
 
 type Iterator struct {
@@ -46,6 +52,11 @@ func (s *Iterator) Next() *yara.MemoryBlock {
 	}
 }
 
+func (s *Iterator) Filesize() uint64 {
+	end, _ := s.rs.Seek(0, io.SeekEnd)
+	return uint64(end)
+}
+
 func Example_ScanMemBlocks() {
 	// Set up a []byte-backed io.ReadSeeker
 	buf := make([]byte, 65536)
@@ -77,7 +88,8 @@ rule B {
 }
 	`, nil)
 
-	mrs, err := rs.ScanMemBlocks(it, 0, 0)
+	var mrs yara.MatchRules
+	err := rs.ScanMemBlocks(it, 0, 0, &mrs)
 	if err != nil {
 		fmt.Printf("error: %+v\n", err)
 		return

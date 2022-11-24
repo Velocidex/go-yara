@@ -1,3 +1,9 @@
+// Copyright © 2015-2020 Hilko Bengen <bengen@hilluzination.de>
+// All rights reserved.
+//
+// Use of this source code is governed by the license that can be
+// found in the LICENSE file.
+
 package yara
 
 import (
@@ -30,7 +36,8 @@ func makeRules(t *testing.T, rule string) *Rules {
 func TestSimpleMatch(t *testing.T) {
 	r := makeRules(t,
 		"rule test : tag1 { meta: author = \"Hilko Bengen\" strings: $a = \"abc\" fullword condition: $a }")
-	m, err := r.ScanMem([]byte(" abc "), 0, 0)
+	var m MatchRules
+	err := r.ScanMem([]byte(" abc "), 0, 0, &m)
 	if err != nil {
 		t.Errorf("ScanMem: %s", err)
 	}
@@ -45,7 +52,8 @@ func TestSimpleFileMatch(t *testing.T) {
 	defer os.Remove(tf.Name())
 	tf.Write([]byte(" abc "))
 	tf.Close()
-	m, err := r.ScanFile(tf.Name(), 0, 0)
+	var m MatchRules
+	err := r.ScanFile(tf.Name(), 0, 0, &m)
 	if err != nil {
 		t.Errorf("ScanFile(%s): %s", tf.Name(), err)
 	}
@@ -60,23 +68,25 @@ func TestSimpleFileDescriptorMatch(t *testing.T) {
 	defer os.Remove(tf.Name())
 	tf.Write([]byte(" abc "))
 	tf.Seek(0, os.SEEK_SET)
-	m, err := r.ScanFileDescriptor(tf.Fd(), 0, 0)
+	var m MatchRules
+	err := r.ScanFileDescriptor(tf.Fd(), 0, 0, &m)
 	if err != nil {
-		t.Errorf("ScanFile(%s): %s", tf.Name(), err)
+		t.Errorf("ScanFileDescriptor(%s): %s", tf.Name(), err)
 	}
 	t.Logf("Matches: %+v", m)
 }
 
 func TestEmpty(t *testing.T) {
 	r, _ := Compile("rule test { condition: true }", nil)
-	r.ScanMem([]byte{}, 0, 0)
+	r.ScanMem([]byte{}, 0, 0, nil)
 	t.Log("Scan of null-byte slice did not crash. Yay.")
 }
 
 func assertTrueRules(t *testing.T, rules []string, data []byte) {
 	for _, rule := range rules {
 		r := makeRules(t, rule)
-		if m, err := r.ScanMem(data, 0, 0); len(m) == 0 {
+		var m MatchRules
+		if err := r.ScanMem(data, 0, 0, &m); len(m) == 0 {
 			t.Errorf("Rule < %s > did not match data < %v >", rule, data)
 		} else if err != nil {
 			t.Errorf("Error %s", err)
@@ -87,7 +97,8 @@ func assertTrueRules(t *testing.T, rules []string, data []byte) {
 func assertFalseRules(t *testing.T, rules []string, data []byte) {
 	for _, rule := range rules {
 		r := makeRules(t, rule)
-		if m, err := r.ScanMem(data, 0, 0); len(m) > 0 {
+		var m MatchRules
+		if err := r.ScanMem(data, 0, 0, &m); len(m) > 0 {
 			t.Errorf("Rule < %s > matched data < %v >", rule, data)
 		} else if err != nil {
 			t.Errorf("Error %s", err)
@@ -111,8 +122,8 @@ func TestReader(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadRules: %+v", err)
 	}
-	m, err := r.ScanMem([]byte(" abc "), 0, 0)
-	if err != nil {
+	var m MatchRules
+	if err := r.ScanMem([]byte(" abc "), 0, 0, &m); err != nil {
 		t.Errorf("ScanMem: %s", err)
 	}
 	t.Logf("Matches: %+v", m)
@@ -192,75 +203,42 @@ func TestScanMemCgoPointer(t *testing.T) {
 	buf.Write([]byte(" abc "))
 	if err := func() (p interface{}) {
 		defer func() { p = recover() }()
-		r.ScanMem(buf.Bytes(), 0, 0)
+		r.ScanMem(buf.Bytes(), 0, 0, nil)
 		return nil
 	}(); err != nil {
 		t.Errorf("ScanMem panicked: %s", err)
 	}
 }
 
+type rule struct {
+	identifier      string
+	tags            []string
+	metas           []Meta
+	private, global bool
+}
+
 func TestRule(t *testing.T) {
-	r := makeRules(t, `
+	rs := makeRules(t, `
 		rule t1 : tag1 { meta: author = "Author One" strings: $a = "abc" fullword condition: $a }
         rule t2 : tag2 x y { meta: author = "Author Two" strings: $b = "def" condition: $b }
         rule t3 : tag3 x y z { meta: author = "Author Three" strings: $c = "ghi" condition: $c }
 		rule t4 { strings: $d = "qwe" condition: $d }
 		private rule t5 { condition: false }
 		global rule t6 { condition: false }`)
-	for _, r := range r.GetRules() {
-		t.Logf("%s:%s %#v", r.Namespace(), r.Identifier(), r.Tags())
-		switch r.Identifier() {
-		case "t1":
-			if !reflect.DeepEqual(r.Tags(), []string{"tag1"}) {
-				t.Error("Got wrong tags for t1")
-			}
-			if !reflect.DeepEqual(r.Metas(), map[string]interface{}{"author": "Author One"}) {
-				t.Error("Got wrong meta variables for t1")
-			}
-		case "t2":
-			if !reflect.DeepEqual(r.Tags(), []string{"tag2", "x", "y"}) {
-				t.Error("Got wrong tags for t2")
-			}
-			if !reflect.DeepEqual(r.Metas(), map[string]interface{}{"author": "Author Two"}) {
-				t.Error("Got wrong meta variables for t2")
-			}
-		case "t3":
-			if !reflect.DeepEqual(r.Tags(), []string{"tag3", "x", "y", "z"}) {
-				t.Error("Got wrong tags for t3")
-			}
-			if !reflect.DeepEqual(r.Metas(), map[string]interface{}{"author": "Author Three"}) {
-				t.Error("Got wrong meta variables for t3")
-			}
-		case "t4":
-			if len(r.Tags()) != 0 {
-				t.Error("Got tags for t4")
-			}
-			if !reflect.DeepEqual(r.Metas(), map[string]interface{}{}) {
-				t.Error("Got wrong meta variables for t4")
-			}
-			if r.IsPrivate() {
-				t.Error("Rule t5 is not supposed to be private!")
-			}
-			if r.IsGlobal() {
-				t.Error("Rule t5 is not supposed to be global!")
-			}
-		case "t5":
-			if !r.IsPrivate() {
-				t.Error("Rule t5 is supposed to be private!")
-			}
-			if r.IsGlobal() {
-				t.Error("Rule t5 is not supposed to be global!")
-			}
-		case "t6":
-			if !r.IsGlobal() {
-				t.Error("Rule t5 is supposed to be global!")
-			}
-			if r.IsPrivate() {
-				t.Error("Rule t6 is not supposed to be private!")
-			}
-		default:
-			t.Errorf("Found unexpected rule name: %#v", r.Identifier())
-		}
+	expected := []rule{
+		rule{"t1", []string{"tag1"}, []Meta{{"author", "Author One"}}, false, false},
+		rule{"t2", []string{"tag2", "x", "y"}, []Meta{{"author", "Author Two"}}, false, false},
+		rule{"t3", []string{"tag3", "x", "y", "z"}, []Meta{{"author", "Author Three"}}, false, false},
+		rule{"t4", nil, nil, false, false},
+		rule{"t5", nil, nil, true, false},
+		rule{"t6", nil, nil, false, true},
+	}
+	var got []rule
+	for _, r := range rs.GetRules() {
+		got = append(got, rule{identifier: r.Identifier(), metas: r.Metas(), tags: r.Tags(), private: r.IsPrivate(), global: r.IsGlobal()})
+	}
+	if !reflect.DeepEqual(got, expected) {
+		t.Errorf("Got %+v , expected %+v", got, expected)
 	}
 }
 
@@ -270,6 +248,7 @@ type testCallback struct {
 	modules    map[string]struct{}
 	matched    map[string]struct{}
 	notMatched map[string]struct{}
+	logged     []string
 }
 
 func newTestCallback(t *testing.T) *testCallback {
@@ -278,25 +257,26 @@ func newTestCallback(t *testing.T) *testCallback {
 		make(map[string]struct{}),
 		make(map[string]struct{}),
 		make(map[string]struct{}),
+		nil,
 	}
 }
 
-func (c *testCallback) RuleMatching(r *Rule) (bool, error) {
+func (c *testCallback) RuleMatching(_ *ScanContext, r *Rule) (bool, error) {
 	c.t.Logf("RuleMatching callback called: rule=%s", r.Identifier())
 	c.matched[r.Identifier()] = struct{}{}
 	return false, nil
 }
-func (c *testCallback) RuleNotMatching(r *Rule) (bool, error) {
+func (c *testCallback) RuleNotMatching(_ *ScanContext, r *Rule) (bool, error) {
 	c.t.Logf("RuleNotMatching callback called: rule=%s", r.Identifier())
 	c.notMatched[r.Identifier()] = struct{}{}
 	return false, nil
 }
-func (c *testCallback) ScanFinished() (bool, error) {
+func (c *testCallback) ScanFinished(*ScanContext) (bool, error) {
 	c.t.Log("ScanFinished callback called")
 	c.finished = true
 	return false, nil
 }
-func (c *testCallback) ImportModule(s string) ([]byte, bool, error) {
+func (c *testCallback) ImportModule(_ *ScanContext, s string) ([]byte, bool, error) {
 	c.t.Logf("ImportModule callback called: module=%s", s)
 	c.modules[s] = struct{}{}
 	if s == "tests" {
@@ -304,9 +284,12 @@ func (c *testCallback) ImportModule(s string) ([]byte, bool, error) {
 	}
 	return nil, false, nil
 }
-func (c *testCallback) ModuleImported(*Object) (bool, error) {
+func (c *testCallback) ModuleImported(*ScanContext, *Object) (bool, error) {
 	c.t.Log("ModuleImported callback called")
 	return false, nil
+}
+func (c *testCallback) ConsoleLog(_ *ScanContext, s string) {
+	c.logged = append(c.logged, s)
 }
 
 func TestImportDataCallback(t *testing.T) {
@@ -319,7 +302,7 @@ func TestImportDataCallback(t *testing.T) {
 		rule t3 {
 			condition: tests.module_data == "callback-data-for-tests-module"
 		}`)
-	if err := r.ScanMemWithCallback([]byte(""), 0, 0, cb); err != nil {
+	if err := r.ScanMem([]byte(""), 0, 0, cb); err != nil {
 		t.Error(err)
 	}
 	for _, module := range []string{"tests", "pe"} {
@@ -339,4 +322,19 @@ func TestImportDataCallback(t *testing.T) {
 		t.Errorf("ScanFinished was not called")
 	}
 	runtime.GC()
+}
+
+func TestConsoleCallback(t *testing.T) {
+	cb := newTestCallback(t)
+	r := makeRules(t, `
+        import "console"
+		rule t { condition: console.log("hello world") }
+        `)
+
+	if err := r.ScanMem([]byte(""), 0, 0, cb); err != nil {
+		t.Error(err)
+	}
+	if len(cb.logged) < 1 || cb.logged[0] != "hello world" {
+		t.Errorf("console log does not containi expected hello world string: %v", cb.logged)
+	}
 }

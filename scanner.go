@@ -1,29 +1,16 @@
-// Copyright © 2015-2019 Hilko Bengen <bengen@hilluzination.de>
+// Copyright © 2015-2020 Hilko Bengen <bengen@hilluzination.de>
 // All rights reserved.
 //
 // Use of this source code is governed by the license that can be
 // found in the LICENSE file.
 
-// +build !yara3.3,!yara3.4,!yara3.5,!yara3.6,!yara3.7
-
 package yara
 
 /*
 #include <yara.h>
+#include "compat.h"
 
-#ifdef _WIN32
-#include <stdint.h>
-int _yr_scanner_scan_fd(
-    YR_SCANNER* scanner,
-    int fd)
-{
-  return yr_scanner_scan_fd(scanner, (YR_FILE_DESCRIPTOR)(intptr_t)fd);
-}
-#else
-#define _yr_scanner_scan_fd yr_scanner_scan_fd
-#endif
-
-int scanCallbackFunc(int, void*, void*);
+int scanCallbackFunc(YR_SCAN_CONTEXT*, int, void*, void*);
 */
 import "C"
 import (
@@ -37,17 +24,21 @@ import (
 // to Rules (YR_RULES) is that it is possible to set variables in a
 // thread-safe manner (cf.
 // https://github.com/VirusTotal/yara/issues/350).
+//
+// Since this type contains a C pointer to a YR_SCANNER structure that
+// may be automatically freed, it should not be copied.
 type Scanner struct {
-	*scanner
+	cptr *C.YR_SCANNER
 	// The Scanner struct has to hold a pointer to the rules
 	// it wraps, as otherwise it may be be garbage collected.
 	rules *Rules
-	// current callback object, set by SetCallback
-	cb ScanCallback
-}
-
-type scanner struct {
-	cptr *C.YR_SCANNER
+	// Current callback object, set by SetCallback
+	Callback ScanCallback
+	// Scan flags are set just before scanning.
+	flags ScanFlags
+	// userData stores handle of the currently set callback object. It is
+	// allocated using malloc so that the GC does not mess with it.
+	userData *cgoHandle
 }
 
 // NewScanner creates a YARA scanner.
@@ -56,25 +47,28 @@ func NewScanner(r *Rules) (*Scanner, error) {
 	if err := newError(C.yr_scanner_create(r.cptr, &yrScanner)); err != nil {
 		return nil, err
 	}
-	s := &Scanner{scanner: &scanner{cptr: yrScanner}, rules: r}
-	runtime.SetFinalizer(s.scanner, (*scanner).finalize)
+	s := &Scanner{cptr: yrScanner, rules: r, userData: (*cgoHandle)(C.malloc(C.size_t(unsafe.Sizeof(cgoHandle(0)))))}
+	*s.userData = 0
+	runtime.SetFinalizer(s, (*Scanner).Destroy)
 	return s, nil
 }
 
-func (s *scanner) finalize() {
-	C.yr_scanner_destroy(s.cptr)
-	runtime.SetFinalizer(s, nil)
-}
-
 // Destroy destroys the YARA data structure representing a scanner.
-// Since a Finalizer for the underlying YR_SCANNER structure is
-// automatically set up on creation, it should not be necessary to
-// explicitly all this method.
+//
+// It should not be necessary to call this method directly.
 func (s *Scanner) Destroy() {
-	if s.scanner != nil {
-		s.scanner.finalize()
-		s.scanner = nil
+	if s.cptr != nil {
+		C.yr_scanner_destroy(s.cptr)
+		s.cptr = nil
 	}
+	if s.userData != nil {
+		if *s.userData != 0 {
+			s.userData.Delete()
+		}
+		C.free(unsafe.Pointer(s.userData))
+		s.userData = nil
+	}
+	runtime.SetFinalizer(s, nil)
 }
 
 // DefineVariable defines a named variable for use by the scanner.
@@ -111,7 +105,7 @@ func (s *Scanner) DefineVariable(identifier string, value interface{}) (err erro
 
 // SetFlags sets flags for the scanner.
 func (s *Scanner) SetFlags(flags ScanFlags) *Scanner {
-	C.yr_scanner_set_flags(s.cptr, C.int(flags))
+	s.flags = flags
 	return s
 }
 
@@ -128,60 +122,60 @@ func (s *Scanner) SetTimeout(timeout time.Duration) *Scanner {
 // For the common case where only a list of matched rules is relevant,
 // setting a callback object is not necessary.
 func (s *Scanner) SetCallback(cb ScanCallback) *Scanner {
-	s.cb = cb
+	s.Callback = cb
 	return s
 }
 
-// putCallbackData stores the appropriate callback object (pre-set
-// object or ad-hoc return-value-based ) into callbackData, returning
-// a pointer. The object must be removed from callbackData by the
-// calling ScanXxxx function.
-func (s *Scanner) putCallbackData(matches *[]MatchRule) unsafe.Pointer {
-	var sc ScanCallback
-	if s.cb != nil {
-		sc = s.cb
-	} else {
-		sc = (*MatchRules)(matches)
+// putCallbackData stores the scanner's callback object in
+// a cgoHandle. If no callback object has been
+// set, it is initialized with the pointer to an empty ScanRules
+// object. The handle must be deleted by the calling ScanXxxx function.
+func (s *Scanner) putCallbackData() {
+	if _, ok := s.Callback.(ScanCallback); !ok {
+		s.Callback = &MatchRules{}
 	}
-	ptr := callbackData.Put(makeScanCallbackContainer(sc))
-	C.yr_scanner_set_callback(s.cptr, C.YR_CALLBACK_FUNC(C.scanCallbackFunc), ptr)
-	return ptr
+	if *s.userData != 0 {
+		s.userData.Delete()
+		*s.userData = 0
+	}
+	*s.userData = cgoNewHandle(makeScanCallbackContainer(s.Callback, s.rules))
+	C.yr_scanner_set_callback(s.cptr, C.YR_CALLBACK_FUNC(C.scanCallbackFunc), unsafe.Pointer(s.userData))
 }
 
 // ScanMem scans an in-memory buffer using the scanner.
 //
-// If a callback object has been set for the scanner using
-// SetCAllback, matches is nil and the callback object is used instead
-// to collect scan events.
-func (s *Scanner) ScanMem(buf []byte) (matches []MatchRule, err error) {
+// If no callback object has been set for the scanner using
+// SetCAllback, it is initialized with an empty MatchRules object.
+func (s *Scanner) ScanMem(buf []byte) (err error) {
 	var ptr *C.uint8_t
 	if len(buf) > 0 {
 		ptr = (*C.uint8_t)(unsafe.Pointer(&(buf[0])))
 	}
-
-	cbPtr := s.putCallbackData(&matches)
-	defer callbackData.Delete(cbPtr)
-
+	s.putCallbackData()
+	C.yr_scanner_set_flags(s.cptr, s.flags.withReportFlags(s.Callback))
 	err = newError(C.yr_scanner_scan_mem(
 		s.cptr,
 		ptr,
 		C.size_t(len(buf))))
 	runtime.KeepAlive(s)
+	runtime.KeepAlive(buf)
 	return
 }
 
 // ScanFile scans a file using the scanner.
 //
-// If a callback object has been set for the scanner using
-// SetCAllback, matches is nil and the callback object is used instead
-// to collect scan events.
-func (s *Scanner) ScanFile(filename string) (matches []MatchRule, err error) {
+// If no callback object has been set for the scanner using
+// SetCAllback, it is initialized with an empty MatchRules object.
+//
+// Note that the filename is passed as-is to the YARA library and may
+// not be processed in a sensible way. It is recommended to avoid this
+// function and to obtain an os.File handle f using os.Open() and use
+// ScanFileDescriptor(f.Fd()) instead.
+func (s *Scanner) ScanFile(filename string) (err error) {
 	cfilename := C.CString(filename)
 	defer C.free(unsafe.Pointer(cfilename))
-
-	cbPtr := s.putCallbackData(&matches)
-	defer callbackData.Delete(cbPtr)
-
+	s.putCallbackData()
+	C.yr_scanner_set_flags(s.cptr, s.flags.withReportFlags(s.Callback))
 	err = newError(C.yr_scanner_scan_file(
 		s.cptr,
 		cfilename,
@@ -192,13 +186,11 @@ func (s *Scanner) ScanFile(filename string) (matches []MatchRule, err error) {
 
 // ScanFileDescriptor scans a file using the scanner.
 //
-// If a callback object has been set for the scanner using
-// SetCAllback, matches is nil and the callback object is used instead
-// to collect scan events.
-func (s *Scanner) ScanFileDescriptor(fd uintptr) (matches []MatchRule, err error) {
-	cbPtr := s.putCallbackData(&matches)
-	defer callbackData.Delete(cbPtr)
-
+// If no callback object has been set for the scanner using
+// SetCAllback, it is initialized with an empty MatchRules object.
+func (s *Scanner) ScanFileDescriptor(fd uintptr) (err error) {
+	s.putCallbackData()
+	C.yr_scanner_set_flags(s.cptr, s.flags.withReportFlags(s.Callback))
 	err = newError(C._yr_scanner_scan_fd(
 		s.cptr,
 		C.int(fd),
@@ -209,13 +201,11 @@ func (s *Scanner) ScanFileDescriptor(fd uintptr) (matches []MatchRule, err error
 
 // ScanProc scans a live process using the scanner.
 //
-// If a callback object has been set for the scanner using
-// SetCAllback, matches is nil and the callback object is used instead
-// to collect scan events.
-func (s *Scanner) ScanProc(pid int) (matches []MatchRule, err error) {
-	cbPtr := s.putCallbackData(&matches)
-	defer callbackData.Delete(cbPtr)
-
+// If no callback object has been set for the scanner using
+// SetCAllback, it is initialized with an empty MatchRules object.
+func (s *Scanner) ScanProc(pid int) (err error) {
+	s.putCallbackData()
+	C.yr_scanner_set_flags(s.cptr, s.flags.withReportFlags(s.Callback))
 	err = newError(C.yr_scanner_scan_proc(
 		s.cptr,
 		C.int(pid),
@@ -224,26 +214,66 @@ func (s *Scanner) ScanProc(pid int) (matches []MatchRule, err error) {
 	return
 }
 
-// GetLastErrorRule returns the Rule which caused the last error
+// ScanMemBlocks scans over a MemoryBlockIterator using the scanner.
+//
+// If no callback object has been set for the scanner using
+// SetCAllback, it is initialized with an empty MatchRules object.
+func (s *Scanner) ScanMemBlocks(mbi MemoryBlockIterator) (err error) {
+	c := makeMemoryBlockIteratorContainer(mbi)
+	defer c.free()
+	cmbi := makeCMemoryBlockIterator(c)
+	defer C.free(cmbi.context)
+	defer ((*cgoHandle)(cmbi.context)).Delete()
+	s.putCallbackData()
+	C.yr_scanner_set_flags(s.cptr, s.flags.withReportFlags(s.Callback))
+	err = newError(C.yr_scanner_scan_mem_blocks(
+		s.cptr,
+		cmbi,
+	))
+	runtime.KeepAlive(s)
+	runtime.KeepAlive(mbi)
+	runtime.KeepAlive(cmbi)
+	return
+}
+
+// GetLastErrorRule returns the Rule which caused the last error.
 //
 // The result is nil, if scanner returned no rule
 func (s *Scanner) GetLastErrorRule() (r *Rule) {
 	ptr := C.yr_scanner_last_error_rule(s.cptr)
 	if ptr != nil {
-		r = &Rule{ptr}
+		r = &Rule{ptr, s.rules}
 	}
 	runtime.KeepAlive(s)
 	return
 }
 
-// GetLastErrorString returns the String which caused the last error
+// GetLastErrorString returns the String which caused the last error.
 //
 // The result is nil, if scanner returned no string
 func (s *Scanner) GetLastErrorString() (r *String) {
 	ptr := C.yr_scanner_last_error_string(s.cptr)
 	if ptr != nil {
-		r = &String{ptr}
+		r = &String{ptr, s.rules}
 	}
 	runtime.KeepAlive(s)
 	return
+}
+
+type RuleProfilingInfo struct {
+	Rule
+	Cost uint64
+}
+
+// GetProfilingInfo retrieves profiling information from the Scanner.
+func (s *Scanner) GetProfilingInfo() (rpis []RuleProfilingInfo) {
+	for rpi := C.yr_scanner_get_profiling_info(s.cptr); rpi.rule != nil; rpi = (*C.YR_RULE_PROFILING_INFO)(unsafe.Pointer(uintptr(unsafe.Pointer(rpi)) + unsafe.Sizeof(*rpi))) {
+		rpis = append(rpis, RuleProfilingInfo{Rule{rpi.rule, s.rules}, uint64(rpi.cost)})
+	}
+	return
+}
+
+// ResetProfilingInfo resets the Scanner's profiling information
+func (s *Scanner) ResetProfilingInfo() {
+	C.yr_scanner_reset_profiling_info(s.cptr)
 }

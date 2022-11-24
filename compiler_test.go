@@ -1,3 +1,9 @@
+// Copyright © 2015-2020 Hilko Bengen <bengen@hilluzination.de>
+// All rights reserved.
+//
+// Use of this source code is governed by the license that can be
+// found in the LICENSE file.
+
 package yara
 
 import "testing"
@@ -35,4 +41,37 @@ func TestWarnings(t *testing.T) {
 		t.Error()
 	}
 	t.Logf("Recorded Errors=%#v, Warnings=%#v", c.Errors, c.Warnings)
+}
+
+func setupCompiler(t *testing.T) *Compiler {
+	c, err := NewCompiler()
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.SetIncludeCallback(func(name, rulefile, namespace string) []byte {
+		t.Logf(`Processing include "%s" (from ns="%s", file="%s")`, name, namespace, rulefile)
+		if name == "existing" {
+			return []byte(`rule ext { condition: true }`)
+		}
+		return nil
+	})
+	return c
+}
+
+func TestCompilerIncludeCallback(t *testing.T) {
+	c := setupCompiler(t)
+	var err error
+	if err = c.AddString(`include "existing"`, ""); err != nil {
+		t.Fatalf(`Failed to include "existing" rule "file": %s`, err)
+	}
+	if err = c.AddString(`rule int { condition: ext }`, ""); err != nil {
+		t.Fatalf(`Failed to define rule referring to included rule: %s`, err)
+	}
+
+	c = setupCompiler(t)
+	if err = c.AddString(`include "non-existing"`, ""); err != nil {
+		t.Logf("Compiler returned error on attempt to include non-existing rule: %s", err)
+	} else {
+		t.Fatal(`Compiler did not return error on non-existing include rule`)
+	}
 }

@@ -1,7 +1,13 @@
+// Copyright © 2015-2020 Hilko Bengen <bengen@hilluzination.de>
+// All rights reserved.
+//
+// Use of this source code is governed by the license that can be
+// found in the LICENSE file.
+
 package yara
 
 import (
-	"bytes"
+	"errors"
 	"io/ioutil"
 	"os"
 	"runtime"
@@ -30,20 +36,13 @@ func makeScanner(t *testing.T, rule string) *Scanner {
 func TestScannerSimpleMatch(t *testing.T) {
 	s := makeScanner(t,
 		"rule test : tag1 { meta: author = \"Matt Blewitt\" strings: $a = \"abc\" fullword condition: $a }")
-	var m1, m2 MatchRules
-	var err error
-	if m1, err = s.ScanMem([]byte(" abc ")); err != nil {
+	var m MatchRules
+	if err := s.SetCallback(&m).ScanMem([]byte(" abc ")); err != nil {
 		t.Errorf("ScanMem: %s", err)
-	} else if len(m1) != 1 {
-		t.Errorf("ScanMem: wanted 1 match, got %d", len(m1))
+	} else if len(m) != 1 {
+		t.Errorf("ScanMem: wanted 1 match, got %d", len(m))
 	}
-	t.Logf("Matches: %+v", m1)
-	if _, err = s.SetCallback(&m2).ScanMem([]byte(" abc ")); err != nil {
-		t.Errorf("ScanMem: %s", err)
-	} else if len(m2) != 1 {
-		t.Errorf("ScanMem: wanted 1 match, got %d", len(m2))
-	}
-	t.Logf("Matches: %+v", m2)
+	t.Logf("Matches: %+v", m)
 }
 
 func TestScannerSimpleFileMatch(t *testing.T) {
@@ -53,20 +52,13 @@ func TestScannerSimpleFileMatch(t *testing.T) {
 	defer os.Remove(tf.Name())
 	tf.Write([]byte(" abc "))
 	tf.Close()
-	var m1, m2 MatchRules
-	var err error
-	if m1, err = s.ScanFile(tf.Name()); err != nil {
+	var m MatchRules
+	if err := s.SetCallback(&m).ScanFile(tf.Name()); err != nil {
 		t.Errorf("ScanFile(%s): %s", tf.Name(), err)
-	} else if len(m1) != 1 {
-		t.Errorf("ScanFile: wanted 1 match, got %d", len(m1))
+	} else if len(m) != 1 {
+		t.Errorf("ScanFile: wanted 1 match, got %d", len(m))
 	}
-	t.Logf("Matches: %+v", m1)
-	if _, err = s.SetCallback(&m2).ScanFile(tf.Name()); err != nil {
-		t.Errorf("ScanFile(%s): %s", tf.Name(), err)
-	} else if len(m2) != 1 {
-		t.Errorf("ScanFile: wanted 1 match, got %d", len(m2))
-	}
-	t.Logf("Matches: %+v", m2)
+	t.Logf("Matches: %+v", m)
 }
 
 func TestScannerSimpleFileDescriptorMatch(t *testing.T) {
@@ -76,20 +68,26 @@ func TestScannerSimpleFileDescriptorMatch(t *testing.T) {
 	defer os.Remove(tf.Name())
 	tf.Write([]byte(" abc "))
 	tf.Seek(0, os.SEEK_SET)
-	var m1, m2 MatchRules
-	var err error
-	if m1, err = s.ScanFileDescriptor(tf.Fd()); err != nil {
+	var m MatchRules
+	if err := s.SetCallback(&m).ScanFileDescriptor(tf.Fd()); err != nil {
 		t.Errorf("ScanFileDescriptor(%v): %s", tf.Fd(), err)
-	} else if len(m1) != 1 {
-		t.Errorf("ScanFileDescriptor: wanted 1 match, got %d", len(m1))
+	} else if len(m) != 1 {
+		t.Errorf("ScanFileDescriptor: wanted 1 match, got %d", len(m))
 	}
-	t.Logf("Matches: %+v", m1)
-	if _, err = s.SetCallback(&m2).ScanFileDescriptor(tf.Fd()); err != nil {
-		t.Errorf("ScanFileDescriptor(%v): %s", tf.Fd(), err)
-	} else if len(m2) != 1 {
-		t.Errorf("ScanFileDescriptor: wanted 1 match, got %d", len(m2))
+	t.Logf("Matches: %+v", m)
+}
+
+func TestScannerEmptyCallback(t *testing.T) {
+	s := makeScanner(t,
+		"rule test : tag1 { meta: author = \"Matt Blewitt\" strings: $a = \"abc\" fullword condition: $a }")
+	if err := s.ScanMem([]byte(" abc ")); err != nil {
+		t.Errorf("ScanMem: %s", err)
 	}
-	t.Logf("Matches: %+v", m2)
+	if m, ok := s.Callback.(*MatchRules); !ok {
+		t.Error("no *MatchRules set")
+	} else if len(*m) != 1 {
+		t.Errorf("length of MatchRules: %d  (expected 1)", len(*m))
+	}
 }
 
 // TestScannerIndependence tests that two scanners can
@@ -138,11 +136,11 @@ func TestScannerIndependence(t *testing.T) {
 	s2.DefineVariable("str_var", "bar")
 
 	var m1, m2 MatchRules
-	if _, err := s1.SetCallback(&m1).ScanMem([]byte("")); err != nil {
+	if err := s1.SetCallback(&m1).ScanMem([]byte("")); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := s2.SetCallback(&m2).ScanMem([]byte("")); err != nil {
+	if err := s2.SetCallback(&m2).ScanMem([]byte("")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -168,7 +166,7 @@ func TestScannerImportDataCallback(t *testing.T) {
 		rule t3 {
 			condition: tests.module_data == "callback-data-for-tests-module"
 		}`)
-	if _, err := s.SetCallback(cb).ScanMem([]byte("")); err != nil {
+	if err := s.SetCallback(cb).ScanMem([]byte("")); err != nil {
 		t.Error(err)
 	}
 	for _, module := range []string{"tests", "pe"} {
@@ -190,27 +188,19 @@ func TestScannerImportDataCallback(t *testing.T) {
 	runtime.GC()
 }
 
-func TestScannerLastError(t *testing.T) {
+type failingScanCallback struct{}
+
+func (*failingScanCallback) RuleMatching(*ScanContext, *Rule) (bool, error) {
+	return true, errors.New("go away")
+}
+
+func TestScannerError(t *testing.T) {
 	s := makeScanner(t, `
-		rule test { strings: $a = "abc" condition: #a>0 }
+		rule test { condition: true }
 		`)
-	// Repeat future match (YR_MAX_STRING_MATCHES + 1) times
-	buffer := bytes.Repeat([]byte(" abc "), 1000000+1)
 	var err error
-	if _, err = s.ScanMem(buffer); err == nil {
+	if err = s.SetCallback(&failingScanCallback{}).ScanMem([]byte{0, 0, 0, 0}); err == nil {
 		t.Fatal("ScanMem: did not fail")
 	}
 	t.Logf("ScanMem: got expected error, %s", err)
-	rule := s.GetLastErrorRule()
-	if rule == nil {
-		t.Error("GetLastErrorRule: returned no rule")
-	} else if rule.Identifier() != "test" {
-		t.Errorf("GetLastErrorRule: returned wrong rule %q", rule.Identifier())
-	}
-	str := s.GetLastErrorString()
-	if str == nil {
-		t.Error("GetLastErrorString: returned no string")
-	} else if str.Identifier() != "$a" {
-		t.Errorf("GetLastErrorString: returned wrong string %q", str.Identifier())
-	}
 }

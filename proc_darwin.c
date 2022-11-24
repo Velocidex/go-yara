@@ -32,20 +32,17 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <mach/mach_vm.h>
 #include <mach/vm_region.h>
 #include <mach/vm_statistics.h>
-
+#include <yara_error.h>
+#include <yara_libyara.h>
 #include <yara_mem.h>
 #include <yara_proc.h>
-#include <yara_error.h>
 
-
-typedef struct _YR_PROC_INFO {
-  task_t            task;
+typedef struct _YR_PROC_INFO
+{
+  task_t task;
 } YR_PROC_INFO;
 
-
-int _yr_process_attach(
-    int pid,
-    YR_PROC_ITERATOR_CTX* context)
+int _yr_process_attach(int pid, YR_PROC_ITERATOR_CTX* context)
 {
   YR_PROC_INFO* proc_info = (YR_PROC_INFO*) yr_malloc(sizeof(YR_PROC_INFO));
 
@@ -65,9 +62,7 @@ int _yr_process_attach(
   return ERROR_SUCCESS;
 }
 
-
-int _yr_process_detach(
-    YR_PROC_ITERATOR_CTX* context)
+int _yr_process_detach(YR_PROC_ITERATOR_CTX* context)
 {
   YR_PROC_INFO* proc_info = context->proc_info;
 
@@ -77,9 +72,7 @@ int _yr_process_detach(
   return ERROR_SUCCESS;
 }
 
-
-YR_API const uint8_t* yr_process_fetch_memory_block_data(
-    YR_MEMORY_BLOCK* block)
+YR_API const uint8_t* yr_process_fetch_memory_block_data(YR_MEMORY_BLOCK* block)
 {
   YR_PROC_ITERATOR_CTX* context = (YR_PROC_ITERATOR_CTX*) block->context;
   YR_PROC_INFO* proc_info = context->proc_info;
@@ -104,18 +97,17 @@ YR_API const uint8_t* yr_process_fetch_memory_block_data(
   }
 
   if (vm_read_overwrite(
-      proc_info->task,
-      (vm_address_t) block->base,
-      block->size,
-      (vm_address_t) context->buffer,
-      &size) != KERN_SUCCESS)
+          proc_info->task,
+          (vm_address_t) block->base,
+          block->size,
+          (vm_address_t) context->buffer,
+          &size) != KERN_SUCCESS)
   {
     return NULL;
   }
 
   return context->buffer;
 }
-
 
 YR_API YR_MEMORY_BLOCK* yr_process_get_next_memory_block(
     YR_MEMORY_BLOCK_ITERATOR* iterator)
@@ -128,8 +120,17 @@ YR_API YR_MEMORY_BLOCK* yr_process_get_next_memory_block(
   mach_port_t object;
   vm_region_basic_info_data_64_t info;
   vm_size_t size = 0;
-  vm_address_t address = (vm_address_t) \
-      context->current_block.base + context->current_block.size;
+
+  uint64_t current_begin = (vm_address_t) context->current_block.base +
+                           context->current_block.size;
+  vm_address_t address = current_begin;
+  uint64_t max_process_memory_chunk;
+
+  yr_get_configuration_uint64(
+      YR_CONFIG_MAX_PROCESS_MEMORY_CHUNK, &max_process_memory_chunk);
+
+  iterator->last_error = ERROR_SUCCESS;
+
   do
   {
     info_count = VM_REGION_BASIC_INFO_COUNT_64;
@@ -145,17 +146,25 @@ YR_API YR_MEMORY_BLOCK* yr_process_get_next_memory_block(
 
     if (kr == KERN_SUCCESS)
     {
-      context->current_block.base = address;
-      context->current_block.size = size;
+      size_t chunk_size = size - (size_t) (current_begin - address);
+
+      if (((uint64_t) chunk_size) > max_process_memory_chunk)
+      {
+        chunk_size = (size_t) max_process_memory_chunk;
+      }
+
+      context->current_block.base = (size_t) current_begin;
+      context->current_block.size = chunk_size;
 
       return &context->current_block;
     }
+
+    current_begin = address;
 
   } while (kr != KERN_INVALID_ADDRESS);
 
   return NULL;
 }
-
 
 YR_API YR_MEMORY_BLOCK* yr_process_get_first_memory_block(
     YR_MEMORY_BLOCK_ITERATOR* iterator)
@@ -165,5 +174,10 @@ YR_API YR_MEMORY_BLOCK* yr_process_get_first_memory_block(
   context->current_block.base = 0;
   context->current_block.size = 0;
 
-  return yr_process_get_next_memory_block(iterator);
+  YR_MEMORY_BLOCK* result = yr_process_get_next_memory_block(iterator);
+
+  if (result == NULL)
+    iterator->last_error = ERROR_COULD_NOT_READ_PROCESS_MEMORY;
+
+  return result;
 }

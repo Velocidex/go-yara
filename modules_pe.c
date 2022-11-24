@@ -3501,10 +3501,7 @@ begin_declarations
     declare_function("toolid", "ii", "i", rich_toolid_version);
   end_struct("rich_signature");
 
-#if defined(HAVE_LIBCRYPTO) || defined(HAVE_WINCRYPT_H) || \
-    defined(HAVE_COMMONCRYPTO_COMMONCRYPTO_H)
   declare_function("imphash", "", "s", imphash);
-#endif
 
   declare_integer("IMPORT_DELAYED");
   declare_integer("IMPORT_STANDARD");

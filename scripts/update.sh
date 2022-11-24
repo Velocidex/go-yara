@@ -43,3 +43,4 @@ sed -i 's/modules\//modules_/g' *.h *.c
 patch -p1 < ./scripts/yara_src.diff
 
 rm limits.h
+rm *_test.go

@@ -12,9 +12,6 @@ git reset --hard
 git checkout v4.2.2
 cd -
 
-#echo Applying patches.
-patch -p1 < ./scripts/yara_src.diff
-
 echo Copying files to golang tree.
 cp yara_src/libyara/*.c .
 cp yara_src/libyara/*.h .
@@ -31,7 +28,11 @@ done
 
 cp yara_src/libyara/proc/linux.c proc_linux.c
 cp yara_src/libyara/proc/windows.c proc_windows.c
+cp yara_src/libyara/proc/freebsd.c proc_freebsd.c
 cp yara_src/libyara/proc/mach.c proc_darwin.c
 
 sed -i 's/yara\//yara_/g' *.h *.c
 sed -i 's/modules\//modules_/g' *.h *.c
+
+#echo Applying patches.
+patch -p1 < ./scripts/yara_src.diff

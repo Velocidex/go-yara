@@ -154,3 +154,22 @@ index 52502e0..648182b 100644
  
    declare_integer("IMPORT_DELAYED");
    declare_integer("IMPORT_STANDARD");
+diff --git a/proc_freebsd.c b/proc_freebsd.c
+index fb8f57a..e0b6f66 100644
+--- a/proc_freebsd.c
++++ b/proc_freebsd.c
+@@ -27,8 +27,6 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+ 
+-#if defined(USE_FREEBSD_PROC)
+-
+ #include <errno.h>
+ #include <fcntl.h>
+ #include <sys/ptrace.h>
+@@ -187,5 +185,3 @@ YR_API YR_MEMORY_BLOCK* yr_process_get_first_memory_block(
+ 
+   return result;
+ }
+-
+-#endif

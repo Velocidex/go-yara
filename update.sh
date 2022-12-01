@@ -34,5 +34,7 @@ cp yara_src/libyara/proc/mach.c proc_darwin.c
 sed -i 's/yara\//yara_/g' *.h *.c
 sed -i 's/modules\//modules_/g' *.h *.c
 
+rm -f limits.h
+
 #echo Applying patches.
 patch -p1 < ./scripts/yara_src.diff

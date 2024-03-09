@@ -18,6 +18,9 @@ git reset --hard
 git checkout v4.3.2
 cd -
 
+echo Cleaning directory
+rm -f *.c *.h *.go modules_module_list
+
 echo Copying files to golang tree.
 cp go-yara/*.go .
 cp go-yara/compat.* .

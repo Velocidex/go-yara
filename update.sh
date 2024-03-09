@@ -9,7 +9,7 @@ git submodule update
 cd yara_src/
 echo Resetting the yara source tree.
 git reset --hard
-git checkout v4.2.2
+git checkout v4.5.0
 cd -
 
 echo Copying files to golang tree.

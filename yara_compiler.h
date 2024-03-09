@@ -42,13 +42,14 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define YARA_ERROR_LEVEL_WARNING 1
 
 // Expression type constants are powers of two because they are used as flags.
-#define EXPRESSION_TYPE_UNKNOWN 0
-#define EXPRESSION_TYPE_BOOLEAN 1
-#define EXPRESSION_TYPE_INTEGER 2
-#define EXPRESSION_TYPE_STRING  4
-#define EXPRESSION_TYPE_REGEXP  8
-#define EXPRESSION_TYPE_OBJECT  16
-#define EXPRESSION_TYPE_FLOAT   32
+#define EXPRESSION_TYPE_UNKNOWN    0
+#define EXPRESSION_TYPE_BOOLEAN    1
+#define EXPRESSION_TYPE_INTEGER    2
+#define EXPRESSION_TYPE_STRING     4
+#define EXPRESSION_TYPE_REGEXP     8
+#define EXPRESSION_TYPE_OBJECT     16
+#define EXPRESSION_TYPE_FLOAT      32
+#define EXPRESSION_TYPE_QUANTIFIER 64
 
 // The compiler uses an arena to store the data it generates during the
 // compilation. Each buffer in the arena is used for storing a different type
@@ -74,6 +75,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // variables.
 #define YR_INTERNAL_LOOP_VARS 3
 
+typedef struct _YR_ENUMERATION
+{
+  int type;
+  int count;
+} YR_ENUMERATION;
+
 typedef struct _YR_EXPRESSION
 {
   int type;
@@ -81,9 +88,16 @@ typedef struct _YR_EXPRESSION
   union
   {
     int64_t integer;
+    double double_;
     YR_OBJECT* object;
     YR_ARENA_REF sized_string_ref;
   } value;
+
+  // Boolean expressions can hold a string count. If not empty, this indicates that the condition
+  // can only be fulfilled if at least so many strings match.
+  struct {
+    int count;
+  } required_strings;
 
   // An expression can have an associated identifier, if "ptr" is not NULL it
   // points to the identifier name, if it is NULL, then "ref" holds a reference
@@ -223,6 +237,7 @@ typedef struct _YR_COMPILER
   int current_line;
   int last_error;
   int last_error_line;
+  bool strict_escape;
 
   jmp_buf error_recovery;
 
@@ -366,6 +381,12 @@ YR_API int yr_compiler_add_fd(
     YR_FILE_DESCRIPTOR rules_fd,
     const char* namespace_,
     const char* file_name);
+
+YR_API int yr_compiler_add_bytes(
+    YR_COMPILER* compiler,
+    const void* rules_data,
+    size_t rules_size,
+    const char* namespace_);
 
 YR_API int yr_compiler_add_string(
     YR_COMPILER* compiler,

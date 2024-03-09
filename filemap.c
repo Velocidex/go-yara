@@ -159,7 +159,9 @@ YR_API int yr_filemap_map_fd(
 
 #ifdef __linux__
 #include <sys/vfs.h>
-#include <linux/magic.h>
+
+#define PROC_SUPER_MAGIC    0x9fa0
+
 #endif
 
 #define MAP_EXTRA_FLAGS 0

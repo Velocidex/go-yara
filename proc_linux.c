@@ -29,7 +29,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // https://github.com/VirusTotal/yara/pull/2048#issuecomment-1965580028
 #if !defined _FILE_OFFSET_BITS
-#define _FILE_OFFSET_BITS=64
+#define _FILE_OFFSET_BITS 64
 #endif
 
 #include <assert.h>

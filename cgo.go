@@ -1,4 +1,4 @@
-// Copyright © 2015-2020 Hilko Bengen <bengen@hilluzination.de>
+// Copyright © 2015-2019 Hilko Bengen <bengen@hilluzination.de>
 // All rights reserved.
 //
 // Use of this source code is governed by the license that can be
@@ -6,13 +6,6 @@
 
 package yara
 
-// #cgo !yara_no_pkg_config,!yara_static  pkg-config: yara
-// #cgo !yara_no_pkg_config,yara_static   pkg-config: --static yara
-// #cgo yara_no_pkg_config                LDFLAGS:    -lyara -lm
-/*
-#include <yara.h>
-#if YR_VERSION_HEX < 0x040300
-#error YARA version 4.3 required
-#endif
-*/
+// #cgo CFLAGS: -D_FILE_OFFSET_BITS=64
+// #cgo LDFLAGS:
 import "C"

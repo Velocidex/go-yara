@@ -28,13 +28,18 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 #include <math.h>
+#include <stdlib.h>
 #include <yara_mem.h>
 #include <yara_modules.h>
+#include <yara_strutils.h>
 #include <yara_utils.h>
 
 #define MODULE_NAME math
 
 #define PI 3.141592653589793
+// This is more than enough space to hold the maximum signed 64bit integer as a
+// string in decimal, hex or octal, including the sign and NULL terminator.
+#define INT64_MAX_STRING 30
 
 // log2 is not defined by math.h in VC++
 
@@ -45,39 +50,24 @@ static double log2(double n)
 }
 #endif
 
-// A fast approximate log2 function:
-// https://github.com/etheory/fastapprox/blob/master/fastapprox/src/fastlog.h
-// Having it here removes the need to link to the math library and
-// reduces our depenencies while being good enough for entropy
-// detection.
-double log2 (double x)
- {
-    union { float f; uint32_t i; } vx = { x };
-    union { uint32_t i; float f; } mx = { (vx.i & 0x007FFFFF) | 0x3f000000 };
-    float y = vx.i;
-    y *= 1.1920928955078125e-7f;
-
-    return y - 124.22551499f
-        - 1.498030302f * mx.f
-        - 1.72587999f / (0.3520887068f + mx.f);
-}
-
-
-uint32_t* get_distribution(int64_t offset, int64_t length, YR_SCAN_CONTEXT* context) {
+uint32_t* get_distribution(
+    int64_t offset,
+    int64_t length,
+    YR_SCAN_CONTEXT* context)
+{
   bool past_first_block = false;
 
   size_t i;
 
   uint32_t* data = (uint32_t*) yr_calloc(256, sizeof(uint32_t));
 
-  if (data == NULL) {
+  if (data == NULL)
     return NULL;
-  }
 
   YR_MEMORY_BLOCK* block = first_memory_block(context);
   YR_MEMORY_BLOCK_ITERATOR* iterator = context->iterator;
 
-  if (offset < 0 || length < 0 || offset < block->base)
+  if (block == NULL || offset < 0 || length < 0 || offset < block->base)
   {
     yr_free(data);
     return NULL;
@@ -87,11 +77,11 @@ uint32_t* get_distribution(int64_t offset, int64_t length, YR_SCAN_CONTEXT* cont
   {
     if (offset >= block->base && offset < block->base + block->size)
     {
-      size_t data_offset = (size_t)(offset - block->base);
+      size_t data_offset = (size_t) (offset - block->base);
       size_t data_len = (size_t) yr_min(
-          length, (size_t)(block->size - data_offset));
+          length, (size_t) (block->size - data_offset));
 
-      const uint8_t* block_data = block->fetch_data(block);
+      const uint8_t* block_data = yr_fetch_block_data(block);
 
       if (block_data == NULL)
       {
@@ -122,7 +112,7 @@ uint32_t* get_distribution(int64_t offset, int64_t length, YR_SCAN_CONTEXT* cont
       return NULL;
     }
 
-    if (block->base + block->size > offset + length)
+    if (block->base + block->size >= offset + length)
       break;
   }
 
@@ -134,8 +124,8 @@ uint32_t* get_distribution(int64_t offset, int64_t length, YR_SCAN_CONTEXT* cont
   return data;
 }
 
-uint32_t* get_distribution_global(YR_SCAN_CONTEXT* context) {
-
+uint32_t* get_distribution_global(YR_SCAN_CONTEXT* context)
+{
   size_t i;
 
   int64_t expected_next_offset = 0;
@@ -145,21 +135,20 @@ uint32_t* get_distribution_global(YR_SCAN_CONTEXT* context) {
   if (data == NULL)
     return NULL;
 
-  YR_MEMORY_BLOCK* block = first_memory_block(context);
+  YR_MEMORY_BLOCK* block;
   YR_MEMORY_BLOCK_ITERATOR* iterator = context->iterator;
-
   foreach_memory_block(iterator, block)
   {
     if (expected_next_offset != block->base)
     {
-      // If offset is not directly after the current block then 
-      // we are trying to compute the distribution over a range of non 
-      // contiguous blocks. As the range contains gaps of 
+      // If offset is not directly after the current block then
+      // we are trying to compute the distribution over a range of non
+      // contiguous blocks. As the range contains gaps of
       // undefined data the distribution is undefined.
       yr_free(data);
       return NULL;
     }
-    const uint8_t* block_data = block->fetch_data(block);
+    const uint8_t* block_data = yr_fetch_block_data(block);
 
     if (block_data == NULL)
     {
@@ -169,8 +158,8 @@ uint32_t* get_distribution_global(YR_SCAN_CONTEXT* context) {
 
     for (i = 0; i < block->size; i++)
     {
-        uint8_t c = *(block_data + i);
-        data[c] += 1;
+      uint8_t c = *(block_data + i);
+      data[c] += 1;
     }
     expected_next_offset = block->base + block->size;
   }
@@ -215,13 +204,14 @@ define_function(data_entropy)
   int64_t offset = integer_argument(1);  // offset where to start
   int64_t length = integer_argument(2);  // length of bytes we want entropy on
 
-  YR_SCAN_CONTEXT* context = scan_context();
+  YR_SCAN_CONTEXT* context = yr_scan_context();
 
   size_t i;
 
   size_t total_len = 0;
 
   uint32_t* data = get_distribution(offset, length, context);
+
   if (data == NULL)
     return_float(YR_UNDEFINED);
 
@@ -268,9 +258,10 @@ define_function(data_deviation)
   size_t total_len = 0;
   size_t i;
 
-  YR_SCAN_CONTEXT* context = scan_context();
+  YR_SCAN_CONTEXT* context = yr_scan_context();
 
   uint32_t* data = get_distribution(offset, length, context);
+
   if (data == NULL)
     return_float(YR_UNDEFINED);
 
@@ -303,12 +294,13 @@ define_function(data_mean)
   int64_t offset = integer_argument(1);
   int64_t length = integer_argument(2);
 
-  YR_SCAN_CONTEXT* context = scan_context();
+  YR_SCAN_CONTEXT* context = yr_scan_context();
 
   size_t total_len = 0;
   size_t i;
 
   uint32_t* data = get_distribution(offset, length, context);
+
   if (data == NULL)
     return_float(YR_UNDEFINED);
 
@@ -332,11 +324,15 @@ define_function(data_serial_correlation)
   int64_t offset = integer_argument(1);
   int64_t length = integer_argument(2);
 
-  YR_SCAN_CONTEXT* context = scan_context();
+  YR_SCAN_CONTEXT* context = yr_scan_context();
   YR_MEMORY_BLOCK* block = first_memory_block(context);
   YR_MEMORY_BLOCK_ITERATOR* iterator = context->iterator;
 
+  if (block == NULL)
+    return_float(YR_UNDEFINED);
+
   double sccun = 0;
+  double sccfirst = 0;
   double scclast = 0;
   double scct1 = 0;
   double scct2 = 0;
@@ -350,11 +346,11 @@ define_function(data_serial_correlation)
   {
     if (offset >= block->base && offset < block->base + block->size)
     {
-      size_t data_offset = (size_t)(offset - block->base);
+      size_t data_offset = (size_t) (offset - block->base);
       size_t data_len = (size_t) yr_min(
-          length, (size_t)(block->size - data_offset));
+          length, (size_t) (block->size - data_offset));
 
-      const uint8_t* block_data = block->fetch_data(block);
+      const uint8_t* block_data = yr_fetch_block_data(block);
 
       if (block_data == NULL)
         return_float(YR_UNDEFINED);
@@ -366,6 +362,10 @@ define_function(data_serial_correlation)
       for (i = 0; i < data_len; i++)
       {
         sccun = (double) *(block_data + data_offset + i);
+        if (i == 0)
+        {
+          sccfirst = sccun;
+        }
         scct1 += scclast * sccun;
         scct2 += sccun;
         scct3 += sccun * sccun;
@@ -384,14 +384,14 @@ define_function(data_serial_correlation)
       return_float(YR_UNDEFINED);
     }
 
-    if (block->base + block->size > offset + length)
+    if (block->base + block->size >= offset + length)
       break;
   }
 
   if (!past_first_block)
     return_float(YR_UNDEFINED);
 
-  scct1 += scclast * sccun;
+  scct1 += scclast * sccfirst;
   scct2 *= scct2;
 
   scc = total_len * scct3 - scct2;
@@ -426,7 +426,10 @@ define_function(string_serial_correlation)
     scclast = sccun;
   }
 
-  scct1 += scclast * sccun;
+  if (s->length > 0)
+  {
+    scct1 += scclast * (double) s->c_string[0];
+  }
   scct2 *= scct2;
 
   scc = s->length * scct3 - scct2;
@@ -453,9 +456,12 @@ define_function(data_monte_carlo_pi)
   int64_t offset = integer_argument(1);
   int64_t length = integer_argument(2);
 
-  YR_SCAN_CONTEXT* context = scan_context();
+  YR_SCAN_CONTEXT* context = yr_scan_context();
   YR_MEMORY_BLOCK* block = first_memory_block(context);
   YR_MEMORY_BLOCK_ITERATOR* iterator = context->iterator;
+
+  if (block == NULL)
+    return_float(YR_UNDEFINED);
 
   if (offset < 0 || length < 0 || offset < block->base)
     return_float(YR_UNDEFINED);
@@ -466,11 +472,11 @@ define_function(data_monte_carlo_pi)
     {
       unsigned int monte[6];
 
-      size_t data_offset = (size_t)(offset - block->base);
+      size_t data_offset = (size_t) (offset - block->base);
       size_t data_len = (size_t) yr_min(
-          length, (size_t)(block->size - data_offset));
+          length, (size_t) (block->size - data_offset));
 
-      const uint8_t* block_data = block->fetch_data(block);
+      const uint8_t* block_data = yr_fetch_block_data(block);
 
       if (block_data == NULL)
         return_float(YR_UNDEFINED);
@@ -513,7 +519,7 @@ define_function(data_monte_carlo_pi)
       return_float(YR_UNDEFINED);
     }
 
-    if (block->base + block->size > offset + length)
+    if (block->base + block->size >= offset + length)
       break;
   }
 
@@ -612,17 +618,20 @@ define_function(yr_math_abs)
 
 define_function(count_range)
 {
-  uint8_t byte = (uint8_t) integer_argument(1);
+  int64_t byte = integer_argument(1);
   int64_t offset = integer_argument(2);
   int64_t length = integer_argument(3);
 
-  YR_SCAN_CONTEXT* context = scan_context();
+  if (byte < 0 || byte > 255)
+    return_integer(YR_UNDEFINED);
+
+  YR_SCAN_CONTEXT* context = yr_scan_context();
 
   uint32_t* distribution = get_distribution(offset, length, context);
+
   if (distribution == NULL)
-  {
     return_integer(YR_UNDEFINED);
-  }
+
   int64_t count = (int64_t) distribution[byte];
   yr_free(distribution);
   return_integer(count);
@@ -630,15 +639,18 @@ define_function(count_range)
 
 define_function(count_global)
 {
-  uint8_t byte = (uint8_t) integer_argument(1);
+  int64_t byte = integer_argument(1);
 
-  YR_SCAN_CONTEXT* context = scan_context();
+  if (byte < 0 || byte > 255)
+    return_integer(YR_UNDEFINED);
+
+  YR_SCAN_CONTEXT* context = yr_scan_context();
 
   uint32_t* distribution = get_distribution_global(context);
+
   if (distribution == NULL)
-  {
     return_integer(YR_UNDEFINED);
-  }
+
   int64_t count = (int64_t) distribution[byte];
   yr_free(distribution);
   return_integer(count);
@@ -646,42 +658,50 @@ define_function(count_global)
 
 define_function(percentage_range)
 {
-  uint8_t byte = (uint8_t) integer_argument(1);
+  int64_t byte = integer_argument(1);
   int64_t offset = integer_argument(2);
   int64_t length = integer_argument(3);
 
-  YR_SCAN_CONTEXT* context = scan_context();
+  if (byte < 0 || byte > 255)
+    return_float(YR_UNDEFINED);
+
+  YR_SCAN_CONTEXT* context = yr_scan_context();
 
   uint32_t* distribution = get_distribution(offset, length, context);
-  if (distribution == NULL) {
+
+  if (distribution == NULL)
     return_float(YR_UNDEFINED);
-  }
+
   int64_t count = (int64_t) distribution[byte];
   int64_t total_count = 0;
   int64_t i;
-  for (i = 0; i < 256; i++) {
-    total_count += distribution[i];
-  }
+
+  for (i = 0; i < 256; i++) total_count += distribution[i];
+
   yr_free(distribution);
   return_float(((float) count) / ((float) total_count));
 }
 
 define_function(percentage_global)
 {
-  uint8_t byte = (uint8_t) integer_argument(1);
+  int64_t byte = integer_argument(1);
 
-  YR_SCAN_CONTEXT* context = scan_context();
+  if (byte < 0 || byte > 255)
+    return_float(YR_UNDEFINED);
+
+  YR_SCAN_CONTEXT* context = yr_scan_context();
 
   uint32_t* distribution = get_distribution_global(context);
-  if (distribution == NULL) {
+
+  if (distribution == NULL)
     return_float(YR_UNDEFINED);
-  }
+
   int64_t count = (int64_t) distribution[byte];
   int64_t total_count = 0;
   int64_t i;
-  for (i = 0; i < 256; i++) {
-    total_count += distribution[i];
-  }
+
+  for (i = 0; i < 256; i++) total_count += distribution[i];
+
   yr_free(distribution);
   return_float(((float) count) / ((float) total_count));
 }
@@ -691,46 +711,78 @@ define_function(mode_range)
   int64_t offset = integer_argument(1);
   int64_t length = integer_argument(2);
 
-  YR_SCAN_CONTEXT* context = scan_context();
+  YR_SCAN_CONTEXT* context = yr_scan_context();
 
   uint32_t* distribution = get_distribution(offset, length, context);
-  if (distribution == NULL) {
+
+  if (distribution == NULL)
     return_integer(YR_UNDEFINED);
-  }
 
   int64_t most_common = 0;
   size_t i;
+
   for (i = 0; i < 256; i++)
   {
     if (distribution[i] > distribution[most_common])
-    {
       most_common = (int64_t) i;
-    }
   }
+
   yr_free(distribution);
   return_integer(most_common);
 }
 
 define_function(mode_global)
 {
-  YR_SCAN_CONTEXT* context = scan_context();
+  YR_SCAN_CONTEXT* context = yr_scan_context();
 
   uint32_t* distribution = get_distribution_global(context);
-  if (distribution == NULL) {
+
+  if (distribution == NULL)
     return_integer(YR_UNDEFINED);
-  }
 
   int64_t most_common = 0;
   size_t i;
+
   for (i = 0; i < 256; i++)
   {
     if (distribution[i] > distribution[most_common])
-    {
       most_common = (int64_t) i;
-    }
   }
+
   yr_free(distribution);
   return_integer(most_common);
+}
+
+define_function(to_string)
+{
+  int64_t i = integer_argument(1);
+  char str[INT64_MAX_STRING];
+  snprintf(str, INT64_MAX_STRING, "%" PRId64, i);
+  return_string(&str);
+}
+
+define_function(to_string_base)
+{
+  int64_t i = integer_argument(1);
+  int64_t base = integer_argument(2);
+  char str[INT64_MAX_STRING];
+  char* fmt;
+  switch (base)
+  {
+  case 10:
+    fmt = "%" PRId64;
+    break;
+  case 8:
+    fmt = "%" PRIo64;
+    break;
+  case 16:
+    fmt = "%" PRIx64;
+    break;
+  default:
+    return_string(YR_UNDEFINED);
+  }
+  snprintf(str, INT64_MAX_STRING, fmt, i);
+  return_string(&str);
 }
 
 begin_declarations
@@ -756,6 +808,8 @@ begin_declarations
   declare_function("percentage", "i", "f", percentage_global);
   declare_function("mode", "ii", "i", mode_range);
   declare_function("mode", "", "i", mode_global);
+  declare_function("to_string", "i", "s", to_string);
+  declare_function("to_string", "ii", "s", to_string_base);
 end_declarations
 
 int module_initialize(YR_MODULE* module)
@@ -774,7 +828,7 @@ int module_load(
     void* module_data,
     size_t module_data_size)
 {
-  set_float(127.5, module_object, "MEAN_BYTES");
+  yr_set_float(127.5, module_object, "MEAN_BYTES");
   return ERROR_SUCCESS;
 }
 

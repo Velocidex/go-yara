@@ -1,110 +1,53 @@
-diff --git a/modules_math.c b/modules_math.c
-index d01ccb0..f5e4125 100644
---- a/modules_math.c
-+++ b/modules_math.c
-@@ -45,6 +45,24 @@ static double log2(double n)
- }
+diff --git b/filemap.c a/filemap.c
+index 32968e0..0252232 100644
+--- b/filemap.c
++++ a/filemap.c
+@@ -159,7 +159,9 @@ YR_API int yr_filemap_map_fd(
+ 
+ #ifdef __linux__
+ #include <sys/vfs.h>
+-#include <linux/magic.h>
++
++#define PROC_SUPER_MAGIC    0x9fa0
++
  #endif
-
-+// A fast approximate log2 function:
-+// https://github.com/etheory/fastapprox/blob/master/fastapprox/src/fastlog.h
-+// Having it here removes the need to link to the math library and
-+// reduces our depenencies while being good enough for entropy
-+// detection.
-+double log2 (double x)
-+ {
-+    union { float f; uint32_t i; } vx = { x };
-+    union { uint32_t i; float f; } mx = { (vx.i & 0x007FFFFF) | 0x3f000000 };
-+    float y = vx.i;
-+    y *= 1.1920928955078125e-7f;
-+
-+    return y - 124.22551499f
-+        - 1.498030302f * mx.f
-+        - 1.72587999f / (0.3520887068f + mx.f);
-+}
-+
-+
- uint32_t* get_distribution(int64_t offset, int64_t length, YR_SCAN_CONTEXT* context) {
-   bool past_first_block = false;
-
-diff --git a/modules_pe.c b/modules_pe.c
-index accc411..298803d 100644
---- a/modules_pe.c
-+++ b/modules_pe.c
-@@ -31,7 +31,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ 
+ #define MAP_EXTRA_FLAGS 0
+diff --git b/modules_elf.c a/modules_elf.c
+index d7844b5..de2188b 100644
+--- b/modules_elf.c
++++ a/modules_elf.c
+@@ -30,7 +30,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ #include <limits.h>
+ #include <stdlib.h>
+ #include <string.h>
+-#include <tlshc/tlsh.h>
++#include <tlsh.h>
+ #include <yara_elf.h>
+ #include <yara_elf_utils.h>
+ #include <yara_endian.h>
+@@ -38,8 +38,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ #include <yara_modules.h>
+ #include <yara_simple_str.h>
+ #include <yara_utils.h>
+-#include "../crypto.h"
+-#include "../exception.h"
++#include "crypto.h"
++#include "exception.h"
+ 
+ #define MODULE_NAME elf
+ 
+diff --git b/modules_pe.c a/modules_pe.c
+index b704801..938bbfb 100644
+--- b/modules_pe.c
++++ a/modules_pe.c
+@@ -31,7 +31,20 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  #include <stdio.h>
  #include <time.h>
-
+ 
 -#include "../crypto.h"
 +#include "crypto.h"
 +
- #if defined(HAVE_LIBCRYPTO)
- #include <openssl/asn1.h>
- #include <openssl/bio.h>
-diff --git a/proc_darwin.c b/proc_darwin.c
-index bb69f53..ecb3b55 100644
---- a/proc_darwin.c
-+++ b/proc_darwin.c
-@@ -27,7 +27,6 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
--#if defined(USE_MACH_PROC)
-
- #include <mach/mach.h>
- #include <mach/mach_vm.h>
-@@ -182,5 +181,3 @@ YR_API YR_MEMORY_BLOCK* yr_process_get_first_memory_block(
-
-   return result;
- }
--
--#endif
-diff --git a/proc_linux.c b/proc_linux.c
-index 807ae72..7f88fae 100644
---- a/proc_linux.c
-+++ b/proc_linux.c
-@@ -27,8 +27,6 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
--#if defined(USE_LINUX_PROC)
--
- #include <errno.h>
- #include <fcntl.h>
- #include <inttypes.h>
-@@ -441,5 +439,3 @@ _exit:
-
-   return result;
- }
--
--#endif
-diff --git a/proc_windows.c b/proc_windows.c
-index 33a3e4f..37de7c4 100644
---- a/proc_windows.c
-+++ b/proc_windows.c
-@@ -27,8 +27,6 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
--#if defined(USE_WINDOWS_PROC)
--
- #include <windows.h>
- #include <yara_error.h>
- #include <yara_libyara.h>
-@@ -192,5 +190,3 @@ YR_API YR_MEMORY_BLOCK* yr_process_get_first_memory_block(
-
-   return result;
- }
--
--#endif
-diff --git a/modules_pe.c b/modules_pe.c
-index 298803d..52502e0 100644
---- a/modules_pe.c
-+++ b/modules_pe.c
-@@ -33,6 +33,18 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- 
- #include "crypto.h"
- 
 +
 +#include "md5.h"
 +typedef MD5_CTX yr_md5_ctx;
@@ -118,9 +61,9 @@ index 298803d..52502e0 100644
 +
 +
  #if defined(HAVE_LIBCRYPTO)
- #include <openssl/asn1.h>
- #include <openssl/bio.h>
-@@ -2601,9 +2613,6 @@ define_function(exports_index_regex)
+ #include <authenticode-parser/authenticode.h>
+ #include <openssl/evp.h>
+@@ -2682,9 +2695,6 @@ define_function(exports_index_regex)
    return_integer(YR_UNDEFINED);
  }
  
@@ -130,7 +73,7 @@ index 298803d..52502e0 100644
  //
  // Generate an import hash:
  // https://www.mandiant.com/blog/tracking-malware-import-hashing/
-@@ -2728,8 +2737,6 @@ define_function(imphash)
+@@ -2809,8 +2819,6 @@ define_function(imphash)
    return_string(digest_ascii);
  }
  
@@ -139,11 +82,7 @@ index 298803d..52502e0 100644
  int64_t pe_imports_dll(IMPORTED_DLL* dll, char* dll_name)
  {
    if (dll == NULL)
-diff --git a/modules_pe.c b/modules_pe.c
-index 52502e0..648182b 100644
---- a/modules_pe.c
-+++ b/modules_pe.c
-@@ -3501,10 +3501,7 @@ begin_declarations
+@@ -3771,10 +3779,7 @@ begin_declarations
      declare_function("toolid", "ii", "i", rich_toolid_version);
    end_struct("rich_signature");
  
@@ -152,24 +91,417 @@ index 52502e0..648182b 100644
    declare_function("imphash", "", "s", imphash);
 -#endif
  
-   declare_integer("IMPORT_DELAYED");
-   declare_integer("IMPORT_STANDARD");
-diff --git a/proc_freebsd.c b/proc_freebsd.c
-index fb8f57a..e0b6f66 100644
---- a/proc_freebsd.c
-+++ b/proc_freebsd.c
+   declare_function("section_index", "s", "i", section_index_name);
+   declare_function("section_index", "i", "i", section_index_addr);
+diff --git b/proc_darwin.c a/proc_darwin.c
+index dccdb15..c03a187 100644
+--- b/proc_darwin.c
++++ a/proc_darwin.c
+@@ -27,7 +27,6 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+ 
+-#if defined(USE_MACH_PROC)
+ 
+ #include <mach/mach.h>
+ #include <mach/mach_vm.h>
+@@ -192,5 +191,3 @@ YR_API YR_MEMORY_BLOCK* yr_process_get_first_memory_block(
+ 
+   return result;
+ }
+-
+-#endif
+diff --git b/proc_freebsd.c a/proc_freebsd.c
+index 68de3b3..e4bb534 100644
+--- b/proc_freebsd.c
++++ a/proc_freebsd.c
 @@ -27,8 +27,6 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
  
 -#if defined(USE_FREEBSD_PROC)
 -
+ #include <assert.h>
  #include <errno.h>
  #include <fcntl.h>
- #include <sys/ptrace.h>
-@@ -187,5 +185,3 @@ YR_API YR_MEMORY_BLOCK* yr_process_get_first_memory_block(
+@@ -188,5 +186,3 @@ YR_API YR_MEMORY_BLOCK* yr_process_get_first_memory_block(
  
    return result;
  }
 -
 -#endif
+diff --git b/proc_linux.c a/proc_linux.c
+index 9a4a822..7f40e3d 100644
+--- b/proc_linux.c
++++ a/proc_linux.c
+@@ -27,7 +27,10 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+ 
+-#if defined(USE_LINUX_PROC)
++// https://github.com/VirusTotal/yara/pull/2048#issuecomment-1965580028
++#if !defined _FILE_OFFSET_BITS
++#define _FILE_OFFSET_BITS 64
++#endif
+ 
+ #include <assert.h>
+ #include <errno.h>
+@@ -249,7 +252,7 @@ YR_API const uint8_t* yr_process_fetch_memory_block_data(YR_MEMORY_BLOCK* block)
+   // target process VM.
+   if (fd == -1)
+   {
+-    if (pread64(
++    if (pread(
+             proc_info->mem_fd,
+             (void*) context->buffer,
+             block->size,
+@@ -265,7 +268,7 @@ YR_API const uint8_t* yr_process_fetch_memory_block_data(YR_MEMORY_BLOCK* block)
+     {
+       goto _exit;
+     }
+-    if (pread64(
++    if (pread(
+             proc_info->pagemap_fd,
+             pagemap,
+             sizeof(uint64_t) * block->size / page_size,
+@@ -284,7 +287,7 @@ YR_API const uint8_t* yr_process_fetch_memory_block_data(YR_MEMORY_BLOCK* block)
+       // swap-backed and if it differs from our mapping.
+       uint8_t buffer[page_size];
+ 
+-      if (pread64(
++      if (pread(
+               proc_info->mem_fd,
+               buffer,
+               page_size,
+@@ -461,5 +464,3 @@ _exit:
+ 
+   return result;
+ }
+-
+-#endif
+diff --git b/proc_windows.c a/proc_windows.c
+index 768442b..da4627e 100644
+--- b/proc_windows.c
++++ a/proc_windows.c
+@@ -27,8 +27,6 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+ 
+-#if defined(USE_WINDOWS_PROC)
+-
+ #include <stdint.h>
+ #include <windows.h>
+ #include <yara_error.h>
+@@ -193,5 +191,3 @@ YR_API YR_MEMORY_BLOCK* yr_process_get_first_memory_block(
+ 
+   return result;
+ }
+-
+-#endif
+diff --git b/tlsh.c a/tlsh.c
+index 534a35b..875db8d 100644
+--- b/tlsh.c
++++ a/tlsh.c
+@@ -1,5 +1,5 @@
+ #include <stdlib.h>
+-#include <tlshc/tlsh.h>
++#include <tlsh.h>
+ #include "tlsh_impl.h"
+ 
+ Tlsh* tlsh_new()
+@@ -77,4 +77,4 @@ const char* tlsh_get_hash(Tlsh* tlsh, bool showvers)
+     return tlsh_impl_hash(tlsh->impl, showvers);
+   else
+     return "";
+-}
+\ No newline at end of file
++}
+diff --git b/tlsh_impl.c a/tlsh_impl.c
+index 36fa4db..f022dd7 100644
+--- b/tlsh_impl.c
++++ a/tlsh_impl.c
+@@ -1,5 +1,5 @@
+ #include "tlsh_impl.h"
+-#include <tlshc/tlsh.h>
++#include <tlsh.h>
+ #include "tlsh_util.h"
+ 
+ #include <stdio.h>
+@@ -204,7 +204,7 @@ int tlsh_impl_update(
+       {
+         if (k == 0)
+         {
+-          //				 b_mapping(0, ... )
++          //                 b_mapping(0, ... )
+           impl->lsh_bin.checksum[k] = fast_b_mapping(
+               1,
+               impl->slide_window[j],
+@@ -225,21 +225,21 @@ int tlsh_impl_update(
+ #endif
+ 
+       unsigned char r;
+-      //	     b_mapping(2, ... )
++      //         b_mapping(2, ... )
+       r = fast_b_mapping(
+           49,
+           impl->slide_window[j],
+           impl->slide_window[j_1],
+           impl->slide_window[j_2]);
+       impl->a_bucket[r]++;
+-      //	     b_mapping(3, ... )
++      //         b_mapping(3, ... )
+       r = fast_b_mapping(
+           12,
+           impl->slide_window[j],
+           impl->slide_window[j_1],
+           impl->slide_window[j_3]);
+       impl->a_bucket[r]++;
+-      //	     b_mapping(5, ... )
++      //         b_mapping(5, ... )
+       r = fast_b_mapping(
+           178,
+           impl->slide_window[j],
+@@ -247,21 +247,21 @@ int tlsh_impl_update(
+           impl->slide_window[j_3]);
+       impl->a_bucket[r]++;
+ #if SLIDING_WND_SIZE >= 5
+-      //	     b_mapping(7, ... )
++      //         b_mapping(7, ... )
+       r = fast_b_mapping(
+           166,
+           impl->slide_window[j],
+           impl->slide_window[j_2],
+           impl->slide_window[j_4]);
+       impl->a_bucket[r]++;
+-      //	     b_mapping(11, ... )
++      //         b_mapping(11, ... )
+       r = fast_b_mapping(
+           84,
+           impl->slide_window[j],
+           impl->slide_window[j_1],
+           impl->slide_window[j_4]);
+       impl->a_bucket[r]++;
+-      //	     b_mapping(13, ... )
++      //         b_mapping(13, ... )
+       r = fast_b_mapping(
+           230,
+           impl->slide_window[j],
+@@ -270,28 +270,28 @@ int tlsh_impl_update(
+       impl->a_bucket[r]++;
+ #endif
+ #if SLIDING_WND_SIZE >= 6
+-      //	     b_mapping(17, ... )
++      //         b_mapping(17, ... )
+       r = fast_b_mapping(
+           197,
+           this->slide_window[j],
+           this->slide_window[j_1],
+           this->slide_window[j_5]);
+       this->a_bucket[r]++;
+-      //	     b_mapping(19, ... )
++      //         b_mapping(19, ... )
+       r = fast_b_mapping(
+           181,
+           this->slide_window[j],
+           this->slide_window[j_2],
+           this->slide_window[j_5]);
+       this->a_bucket[r]++;
+-      //	     b_mapping(23, ... )
++      //         b_mapping(23, ... )
+       r = fast_b_mapping(
+           80,
+           this->slide_window[j],
+           this->slide_window[j_3],
+           this->slide_window[j_5]);
+       this->a_bucket[r]++;
+-      //	     b_mapping(29, ... )
++      //         b_mapping(29, ... )
+       r = fast_b_mapping(
+           142,
+           this->slide_window[j],
+@@ -300,35 +300,35 @@ int tlsh_impl_update(
+       this->a_bucket[r]++;
+ #endif
+ #if SLIDING_WND_SIZE >= 7
+-      //	     b_mapping(31, ... )
++      //         b_mapping(31, ... )
+       r = fast_b_mapping(
+           200,
+           this->slide_window[j],
+           this->slide_window[j_1],
+           this->slide_window[j_6]);
+       this->a_bucket[r]++;
+-      //	     b_mapping(37, ... )
++      //         b_mapping(37, ... )
+       r = fast_b_mapping(
+           253,
+           this->slide_window[j],
+           this->slide_window[j_2],
+           this->slide_window[j_6]);
+       this->a_bucket[r]++;
+-      //	     b_mapping(41, ... )
++      //         b_mapping(41, ... )
+       r = fast_b_mapping(
+           101,
+           this->slide_window[j],
+           this->slide_window[j_3],
+           this->slide_window[j_6]);
+       this->a_bucket[r]++;
+-      //	     b_mapping(43, ... )
++      //         b_mapping(43, ... )
+       r = fast_b_mapping(
+           18,
+           this->slide_window[j],
+           this->slide_window[j_4],
+           this->slide_window[j_6]);
+       this->a_bucket[r]++;
+-      //	     b_mapping(47, ... )
++      //         b_mapping(47, ... )
+       r = fast_b_mapping(
+           222,
+           this->slide_window[j],
+@@ -337,42 +337,42 @@ int tlsh_impl_update(
+       this->a_bucket[r]++;
+ #endif
+ #if SLIDING_WND_SIZE >= 8
+-      //	     b_mapping(53, ... )
++      //         b_mapping(53, ... )
+       r = fast_b_mapping(
+           237,
+           this->slide_window[j],
+           this->slide_window[j_1],
+           this->slide_window[j_7]);
+       this->a_bucket[r]++;
+-      //	     b_mapping(59, ... )
++      //         b_mapping(59, ... )
+       r = fast_b_mapping(
+           214,
+           this->slide_window[j],
+           this->slide_window[j_2],
+           this->slide_window[j_7]);
+       this->a_bucket[r]++;
+-      //	     b_mapping(61, ... )
++      //         b_mapping(61, ... )
+       r = fast_b_mapping(
+           227,
+           this->slide_window[j],
+           this->slide_window[j_3],
+           this->slide_window[j_7]);
+       this->a_bucket[r]++;
+-      //	     b_mapping(67, ... )
++      //         b_mapping(67, ... )
+       r = fast_b_mapping(
+           22,
+           this->slide_window[j],
+           this->slide_window[j_4],
+           this->slide_window[j_7]);
+       this->a_bucket[r]++;
+-      //	     b_mapping(71, ... )
++      //         b_mapping(71, ... )
+       r = fast_b_mapping(
+           175,
+           this->slide_window[j],
+           this->slide_window[j_5],
+           this->slide_window[j_7]);
+       this->a_bucket[r]++;
+-      //	     b_mapping(73, ... )
++      //         b_mapping(73, ... )
+       r = fast_b_mapping(
+           5,
+           this->slide_window[j],
+@@ -400,9 +400,9 @@ int tlsh_impl_update(
+ /////////////////////////////////////////////////////////////////////////////
+ // update for the case when SLIDING_WND_SIZE==5
+ // have different optimized functions for
+-//	default TLSH
+-//	threaded TLSH
+-//	private TLSH
++//  default TLSH
++//  threaded TLSH
++//  private TLSH
+ /////////////////////////////////////////////////////////////////////////////
+ static void raw_fast_update5(
+     // inputs
+@@ -687,10 +687,10 @@ static void raw_fast_update5_private(
+ 
+ /////////////////////////////////////////////////////////////////////////////
+ // fc_cons_option - a bitfield
+-//	0	default
+-//	1	force (now the default)
+-//	2	conservative
+-//	4	do not delete a_bucket
++//  0   default
++//  1   force (now the default)
++//  2   conservative
++//  4   do not delete a_bucket
+ /////////////////////////////////////////////////////////////////////////////
+ 
+ /* to signal the class there is no more data to be added */
+diff --git b/tlsh_impl.h a/tlsh_impl.h
+index 4ebcb41..634b91b 100644
+--- b/tlsh_impl.h
++++ a/tlsh_impl.h
+@@ -10,6 +10,9 @@
+ 
+ // BUCKETS_256 & CHECKSUM_3B are compiler switches defined in CMakeLists.txt
+ 
++#define BUCKETS_256 1
++#define CHECKSUM_3B 1
++
+ #if defined BUCKETS_256
+ #define EFF_BUCKETS 256
+ #define CODE_SIZE   64  // 256 * 2 bits = 64 bytes
+@@ -118,4 +121,4 @@ extern "C"
+ }
+ #endif
+ 
+-#endif  // __TLSH_TLSH_IMPL_H__
+\ No newline at end of file
++#endif  // __TLSH_TLSH_IMPL_H__
+diff --git b/tlsh_util.c a/tlsh_util.c
+index c11ad9a..ca93cae 100644
+--- b/tlsh_util.c
++++ a/tlsh_util.c
+@@ -3466,7 +3466,7 @@ unsigned char l_capturing(unsigned int len)
+     }
+     if ((len <= topval[idx]) && (len > topval[idx - 1]))
+     {
+-      // printf("len=%u	idx=%u\n", len, idx);
++      // printf("len=%u idx=%u\n", len, idx);
+       return (idx);
+     }
+     if (len < topval[idx])
+@@ -3500,7 +3500,7 @@ int mod_diff(unsigned int x, unsigned int y, unsigned int R)
+ 
+ ///////////////////////////////////////////////////////////////
+ 
+-#include <tlshc/tlsh.h>
++#include <tlsh.h>
+ 
+ #ifdef TLSH_DISTANCE_PARAMETERS
+ #include <stdlib.h>         // for abs()
+@@ -3513,20 +3513,20 @@ static int pairbit_diff(int pairb, int opairb)
+   int diff = abs(pairb - opairb);
+   if (diff == 0)
+   {
+-    // printf("PBD:	%d\n", diff);
++    // printf("PBD: %d\n", diff);
+     return (0);
+   }
+   else if (diff == 1)
+   {
+-    // printf("PBD:	diff=%d	%d\n", diff, hist_diff1_add);
++    // printf("PBD: diff=%d %d\n", diff, hist_diff1_add);
+     return (hist_diff1_add);
+   }
+   else if (diff == 2)
+   {
+-    // printf("PBD:	diff=%d	%d\n", diff, hist_diff2_add);
++    // printf("PBD: diff=%d %d\n", diff, hist_diff2_add);
+     return (hist_diff2_add);
+   }
+-  // printf("PBD:	diff=%d	%d\n", diff, hist_diff3_add);
++  // printf("PBD:   diff=%d %d\n", diff, hist_diff3_add);
+   return (hist_diff3_add);
+ }
+ 

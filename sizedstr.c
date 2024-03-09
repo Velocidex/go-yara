@@ -32,6 +32,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <yara_globals.h>
 #include <yara_mem.h>
 #include <yara_sizedstr.h>
+#include <yara_strutils.h>
 #include <yara_types.h>
 
 ////////////////////////////////////////////////////////////////////////////////

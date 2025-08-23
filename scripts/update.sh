@@ -9,7 +9,7 @@ git submodule update
 cd yara_src/
 echo Resetting the yara source tree.
 git reset --hard
-git checkout v4.5.0
+git checkout v4.5.4
 cd -
 
 cd go-yara/
@@ -36,7 +36,7 @@ for i in yara_src/libyara/include/yara/*.h; do
     cp $i yara_`basename $i`
 done
 
-for i in `ls yara_src/libyara/modules/{pe,elf,math,time}/*.[ch]`; do
+for i in `ls yara_src/libyara/modules/{pe,elf,math,time,dotnet}/*.[ch]`; do
     echo cp $i modules_`basename $i`
     cp $i modules_`basename $i`
 done

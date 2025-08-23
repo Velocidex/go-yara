@@ -1,20 +1,5 @@
-diff --git b/filemap.c a/filemap.c
-index 32968e0..0252232 100644
---- b/filemap.c
-+++ a/filemap.c
-@@ -159,7 +159,9 @@ YR_API int yr_filemap_map_fd(
- 
- #ifdef __linux__
- #include <sys/vfs.h>
--#include <linux/magic.h>
-+
-+#define PROC_SUPER_MAGIC    0x9fa0
-+
- #endif
- 
- #define MAP_EXTRA_FLAGS 0
 diff --git b/modules_elf.c a/modules_elf.c
-index d7844b5..de2188b 100644
+index 43b1176..39e65c5 100644
 --- b/modules_elf.c
 +++ a/modules_elf.c
 @@ -30,7 +30,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
@@ -38,7 +23,7 @@ index d7844b5..de2188b 100644
  #define MODULE_NAME elf
  
 diff --git b/modules_pe.c a/modules_pe.c
-index b704801..938bbfb 100644
+index ff0071e..9ea07e2 100644
 --- b/modules_pe.c
 +++ a/modules_pe.c
 @@ -31,7 +31,20 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
@@ -63,7 +48,7 @@ index b704801..938bbfb 100644
  #if defined(HAVE_LIBCRYPTO)
  #include <authenticode-parser/authenticode.h>
  #include <openssl/evp.h>
-@@ -2682,9 +2695,6 @@ define_function(exports_index_regex)
+@@ -2715,9 +2728,6 @@ define_function(exports_index_regex)
    return_integer(YR_UNDEFINED);
  }
  
@@ -73,7 +58,7 @@ index b704801..938bbfb 100644
  //
  // Generate an import hash:
  // https://www.mandiant.com/blog/tracking-malware-import-hashing/
-@@ -2809,8 +2819,6 @@ define_function(imphash)
+@@ -2842,8 +2852,6 @@ define_function(imphash)
    return_string(digest_ascii);
  }
  
@@ -82,7 +67,7 @@ index b704801..938bbfb 100644
  int64_t pe_imports_dll(IMPORTED_DLL* dll, char* dll_name)
  {
    if (dll == NULL)
-@@ -3771,10 +3779,7 @@ begin_declarations
+@@ -3809,10 +3817,7 @@ begin_declarations
      declare_function("toolid", "ii", "i", rich_toolid_version);
    end_struct("rich_signature");
  
@@ -93,8 +78,24 @@ index b704801..938bbfb 100644
  
    declare_function("section_index", "s", "i", section_index_name);
    declare_function("section_index", "i", "i", section_index_addr);
+@@ -3898,7 +3903,6 @@ begin_declarations
+   declare_integer("number_of_resources");
+   declare_string("pdb_path");
+ 
+-#if defined(HAVE_LIBCRYPTO) && !defined(BORINGSSL)
+   begin_struct_array("signatures")
+     declare_string("thumbprint");
+     declare_string("issuer");
+@@ -3977,7 +3981,6 @@ begin_declarations
+   // If any of the signatures correctly signs the binary
+   declare_integer("is_signed");
+   declare_integer("number_of_signatures");
+-#endif
+ 
+   declare_function("rva_to_offset", "i", "i", rva_to_offset);
+ end_declarations
 diff --git b/proc_darwin.c a/proc_darwin.c
-index dccdb15..c03a187 100644
+index b9563a8..af705ba 100644
 --- b/proc_darwin.c
 +++ a/proc_darwin.c
 @@ -27,7 +27,6 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
@@ -105,7 +106,7 @@ index dccdb15..c03a187 100644
  
  #include <mach/mach.h>
  #include <mach/mach_vm.h>
-@@ -192,5 +191,3 @@ YR_API YR_MEMORY_BLOCK* yr_process_get_first_memory_block(
+@@ -191,5 +190,3 @@ YR_API YR_MEMORY_BLOCK* yr_process_get_first_memory_block(
  
    return result;
  }
@@ -131,7 +132,7 @@ index 68de3b3..e4bb534 100644
 -
 -#endif
 diff --git b/proc_linux.c a/proc_linux.c
-index 9a4a822..7f40e3d 100644
+index af64d5c..b852556 100644
 --- b/proc_linux.c
 +++ a/proc_linux.c
 @@ -27,7 +27,10 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
@@ -144,36 +145,9 @@ index 9a4a822..7f40e3d 100644
 +#define _FILE_OFFSET_BITS 64
 +#endif
  
- #include <assert.h>
- #include <errno.h>
-@@ -249,7 +252,7 @@ YR_API const uint8_t* yr_process_fetch_memory_block_data(YR_MEMORY_BLOCK* block)
-   // target process VM.
-   if (fd == -1)
-   {
--    if (pread64(
-+    if (pread(
-             proc_info->mem_fd,
-             (void*) context->buffer,
-             block->size,
-@@ -265,7 +268,7 @@ YR_API const uint8_t* yr_process_fetch_memory_block_data(YR_MEMORY_BLOCK* block)
-     {
-       goto _exit;
-     }
--    if (pread64(
-+    if (pread(
-             proc_info->pagemap_fd,
-             pagemap,
-             sizeof(uint64_t) * block->size / page_size,
-@@ -284,7 +287,7 @@ YR_API const uint8_t* yr_process_fetch_memory_block_data(YR_MEMORY_BLOCK* block)
-       // swap-backed and if it differs from our mapping.
-       uint8_t buffer[page_size];
+ #define _FILE_OFFSET_BITS 64
  
--      if (pread64(
-+      if (pread(
-               proc_info->mem_fd,
-               buffer,
-               page_size,
-@@ -461,5 +464,3 @@ _exit:
+@@ -463,5 +466,3 @@ _exit:
  
    return result;
  }

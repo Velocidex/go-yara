@@ -20,8 +20,6 @@ jobs:
 
     - name: Build
       if: always()
-      env:
-        CC: x86_64-w64-mingw32-gcc
       shell: bash
       run: |
         bash -c ./scripts/test.sh

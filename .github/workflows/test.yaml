@@ -1,0 +1,27 @@
+name: Windows Test
+on: [pull_request]
+jobs:
+  build:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+    - name: Set up Go 1.23
+      uses: actions/setup-go@v4
+      with:
+        go-version: 1.23
+
+        # Caching seems to really slow down the build due to the time
+        # taken to save the cache.
+        cache: false
+      id: go
+
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v4
+
+    - name: Build
+      if: always()
+      env:
+        CC: x86_64-w64-mingw32-gcc
+      shell: bash
+      run: |
+        bash -c ./scripts/test.sh

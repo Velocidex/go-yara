@@ -46,6 +46,7 @@ type MatchString struct {
 	Base   uint64
 	Offset uint64
 	Data   []byte
+	XorKey uint8
 }
 
 // ScanFlags are used to tweak the behavior of Scan* functions.
@@ -164,7 +165,7 @@ func (r *Rules) ScanMemBlocks(mbi MemoryBlockIterator, flags ScanFlags, timeout 
 	err = newError(C.yr_rules_scan_mem_blocks(
 		r.cptr,
 		cmbi,
-		flags.withReportFlags(cb),
+		flags.withReportFlags(cb)|C.SCAN_FLAGS_NO_TRYCATCH,
 		C.YR_CALLBACK_FUNC(C.scanCallbackFunc),
 		unsafe.Pointer(&userData),
 		C.int(timeout/time.Second)))

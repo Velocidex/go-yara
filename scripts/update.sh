@@ -15,7 +15,7 @@ cd -
 cd go-yara/
 echo Resetting the go-yara source tree.
 git reset --hard
-git checkout v4.3.2
+git checkout v4.3.4
 cd -
 
 echo Cleaning directory

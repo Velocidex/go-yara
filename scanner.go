@@ -41,6 +41,23 @@ type Scanner struct {
 	userData *cgoHandle
 }
 
+// Creates a new error that includes information a about the rule
+// causing the error.
+func (s *Scanner) newScanError(code C.int) error {
+	if code == C.ERROR_SUCCESS {
+		return nil
+	}
+	err := Error{Code: int(code)}
+	if rule := s.GetLastErrorRule(); rule != nil {
+		err.RuleIdentifier = rule.Identifier()
+		err.Namespace = rule.Namespace()
+	}
+	if str := s.GetLastErrorString(); str != nil {
+		err.StringIdentifier = str.Identifier()
+	}
+	return err
+}
+
 // NewScanner creates a YARA scanner.
 func NewScanner(r *Rules) (*Scanner, error) {
 	var yrScanner *C.YR_SCANNER
@@ -152,8 +169,16 @@ func (s *Scanner) ScanMem(buf []byte) (err error) {
 		ptr = (*C.uint8_t)(unsafe.Pointer(&(buf[0])))
 	}
 	s.putCallbackData()
-	C.yr_scanner_set_flags(s.cptr, s.flags.withReportFlags(s.Callback))
-	err = newError(C.yr_scanner_scan_mem(
+	// SCAN_FLAGS_NO_TRYCATCH disables the YARA's exception handler that
+	// captures segfaults. Capturing these exceptions only makes sense
+	// while scanning memory-mapped files. When scanning in-memory data
+	// the excepton-handling mechanism doesn't have any benefit and only
+	// causes trouble, as it can interfere with golang's ability to detect
+	// null-pointer dereferences and panic accordingly.
+	C.yr_scanner_set_flags(
+		s.cptr,
+		s.flags.withReportFlags(s.Callback)|C.SCAN_FLAGS_NO_TRYCATCH)
+	err = s.newScanError(C.yr_scanner_scan_mem(
 		s.cptr,
 		ptr,
 		C.size_t(len(buf))))
@@ -176,7 +201,7 @@ func (s *Scanner) ScanFile(filename string) (err error) {
 	defer C.free(unsafe.Pointer(cfilename))
 	s.putCallbackData()
 	C.yr_scanner_set_flags(s.cptr, s.flags.withReportFlags(s.Callback))
-	err = newError(C.yr_scanner_scan_file(
+	err = s.newScanError(C.yr_scanner_scan_file(
 		s.cptr,
 		cfilename,
 	))
@@ -191,7 +216,7 @@ func (s *Scanner) ScanFile(filename string) (err error) {
 func (s *Scanner) ScanFileDescriptor(fd uintptr) (err error) {
 	s.putCallbackData()
 	C.yr_scanner_set_flags(s.cptr, s.flags.withReportFlags(s.Callback))
-	err = newError(C._yr_scanner_scan_fd(
+	err = s.newScanError(C._yr_scanner_scan_fd(
 		s.cptr,
 		C.int(fd),
 	))
@@ -206,7 +231,7 @@ func (s *Scanner) ScanFileDescriptor(fd uintptr) (err error) {
 func (s *Scanner) ScanProc(pid int) (err error) {
 	s.putCallbackData()
 	C.yr_scanner_set_flags(s.cptr, s.flags.withReportFlags(s.Callback))
-	err = newError(C.yr_scanner_scan_proc(
+	err = s.newScanError(C.yr_scanner_scan_proc(
 		s.cptr,
 		C.int(pid),
 	))
@@ -217,7 +242,7 @@ func (s *Scanner) ScanProc(pid int) (err error) {
 // ScanMemBlocks scans over a MemoryBlockIterator using the scanner.
 //
 // If no callback object has been set for the scanner using
-// SetCAllback, it is initialized with an empty MatchRules object.
+// SetCallback, it is initialized with an empty MatchRules object.
 func (s *Scanner) ScanMemBlocks(mbi MemoryBlockIterator) (err error) {
 	c := makeMemoryBlockIteratorContainer(mbi)
 	defer c.free()
@@ -225,8 +250,8 @@ func (s *Scanner) ScanMemBlocks(mbi MemoryBlockIterator) (err error) {
 	defer C.free(cmbi.context)
 	defer ((*cgoHandle)(cmbi.context)).Delete()
 	s.putCallbackData()
-	C.yr_scanner_set_flags(s.cptr, s.flags.withReportFlags(s.Callback))
-	err = newError(C.yr_scanner_scan_mem_blocks(
+	C.yr_scanner_set_flags(s.cptr, s.flags.withReportFlags(s.Callback)|C.SCAN_FLAGS_NO_TRYCATCH)
+	err = s.newScanError(C.yr_scanner_scan_mem_blocks(
 		s.cptr,
 		cmbi,
 	))
@@ -267,13 +292,17 @@ type RuleProfilingInfo struct {
 
 // GetProfilingInfo retrieves profiling information from the Scanner.
 func (s *Scanner) GetProfilingInfo() (rpis []RuleProfilingInfo) {
-	for rpi := C.yr_scanner_get_profiling_info(s.cptr); rpi.rule != nil; rpi = (*C.YR_RULE_PROFILING_INFO)(unsafe.Pointer(uintptr(unsafe.Pointer(rpi)) + unsafe.Sizeof(*rpi))) {
+	rpi := C.yr_scanner_get_profiling_info(s.cptr)
+	defer C.yr_free(unsafe.Pointer(rpi))
+	for ; rpi.rule != nil; rpi = (*C.YR_RULE_PROFILING_INFO)(unsafe.Pointer(uintptr(unsafe.Pointer(rpi)) + unsafe.Sizeof(*rpi))) {
 		rpis = append(rpis, RuleProfilingInfo{Rule{rpi.rule, s.rules}, uint64(rpi.cost)})
 	}
+	runtime.KeepAlive(s)
 	return
 }
 
 // ResetProfilingInfo resets the Scanner's profiling information
 func (s *Scanner) ResetProfilingInfo() {
 	C.yr_scanner_reset_profiling_info(s.cptr)
+	runtime.KeepAlive(s)
 }

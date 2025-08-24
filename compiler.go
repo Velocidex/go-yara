@@ -10,6 +10,16 @@ package yara
 #include <yara.h>
 #include "compat.h"
 
+// rule_identifier is a union accessor function.
+static const char* rule_identifier(YR_RULE* r) {
+	return r->identifier;
+}
+
+// rule_namespace is a union accessor function.
+static const char* rule_namespace(YR_RULE* r) {
+	return r->ns->name;
+}
+
 void compilerCallback(int, char*, int, YR_RULE*, char*, void*);
 char* includeCallback(char*, char*, char*, void*);
 void freeCallback(char*, void*);
@@ -17,6 +27,7 @@ void freeCallback(char*, void*);
 import "C"
 import (
 	"errors"
+	"fmt"
 	"os"
 	"reflect"
 	"runtime"
@@ -26,15 +37,26 @@ import (
 //export compilerCallback
 func compilerCallback(errorLevel C.int, filename *C.char, linenumber C.int, rule *C.YR_RULE, message *C.char, userData unsafe.Pointer) {
 	c := cgoHandle(*(*uintptr)(userData)).Value().(*Compiler)
+	var text string
+	if rule != nil {
+		text = fmt.Sprintf("rule \"%s\": %s",
+			C.GoString(C.rule_identifier(rule)),
+			C.GoString(message))
+	} else {
+		text = C.GoString(message)
+	}
 	msg := CompilerMessage{
 		Filename: C.GoString(filename),
 		Line:     int(linenumber),
-		Text:     C.GoString(message),
+		Text:     text,
 	}
 	if rule != nil {
-		// Rule object implicitly relies on the compiler object and is destroyed when the compiler is destroyed.
-		// Save a reference to the compiler to prevent that from happening.
-		msg.Rule = &Rule{cptr: rule, owner: c}
+		msg.Rule = C.GoString(C.rule_namespace(rule))
+		if msg.Rule == "default" {
+			msg.Rule = C.GoString(C.rule_identifier(rule))
+		} else {
+			msg.Rule += "." + C.GoString(C.rule_identifier(rule))
+		}
 	}
 	switch errorLevel {
 	case C.YARA_ERROR_LEVEL_ERROR:
@@ -64,7 +86,7 @@ type CompilerMessage struct {
 	Filename string
 	Line     int
 	Text     string
-	Rule     *Rule
+	Rule     string
 }
 
 // NewCompiler creates a YARA compiler.
@@ -104,14 +126,28 @@ func (c *Compiler) setCallbackData(cb CompilerIncludeFunc) {
 	}
 }
 
+var (
+	errParse = errors.New("Compiler cannot be used after parse error")
+	errRules = errors.New("Compiler cannot be used after producing rule set")
+)
+
+func (c *Compiler) checkUsage() (err error) {
+	if c.cptr.errors != 0 {
+		err = errParse
+	} else if c.cptr.rules != nil {
+		err = errRules
+	}
+	return
+}
+
 // AddFile compiles rules from a file. Rules are added to the
 // specified namespace.
 //
 // If this function returns an error, the Compiler object will become
 // unusable.
 func (c *Compiler) AddFile(file *os.File, namespace string) (err error) {
-	if c.cptr.errors != 0 {
-		return errors.New("Compiler cannot be used after parse error")
+	if err := c.checkUsage(); err != nil {
+		return err
 	}
 	var ns *C.char
 	if namespace != "" {
@@ -142,8 +178,8 @@ func (c *Compiler) AddFile(file *os.File, namespace string) (err error) {
 // If this function returns an error, the Compiler object will become
 // unusable.
 func (c *Compiler) AddString(rules string, namespace string) (err error) {
-	if c.cptr.errors != 0 {
-		return errors.New("Compiler cannot be used after parse error")
+	if err := c.checkUsage(); err != nil {
+		return err
 	}
 	var ns *C.char
 	if namespace != "" {
@@ -202,8 +238,8 @@ func (c *Compiler) DefineVariable(identifier string, value interface{}) (err err
 
 // GetRules returns the compiled ruleset.
 func (c *Compiler) GetRules() (*Rules, error) {
-	if c.cptr.errors != 0 {
-		return nil, errors.New("Compiler cannot be used after parse error")
+	if err := c.checkUsage(); err != nil {
+		return nil, err
 	}
 	var yrRules *C.YR_RULES
 	if err := newError(C.yr_compiler_get_rules(c.cptr, &yrRules)); err != nil {

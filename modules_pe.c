@@ -2818,7 +2818,7 @@ define_function(imphash)
       for (i = 0; i < final_name_len; i++)
         final_name[i] = tolower(final_name[i]);
 
-      yr_md5_update(&ctx, final_name, final_name_len);
+      yr_md5_update(&ctx, (const unsigned  char *)final_name, final_name_len);
 
       yr_free(final_name);
 
